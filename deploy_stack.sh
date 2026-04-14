@@ -8,6 +8,12 @@
 
 set -euo pipefail
 
+# ── OS check ─────────────────────────────────────────────────────────────────
+if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "✗ This script is for Linux (ARM64) only. Run it on the Pi, not your Mac."
+    exit 1
+fi
+
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}✓ $1${NC}"; }
