@@ -35,7 +35,7 @@ PB_VERSION="0.23.4"
 PB_ZIP="pocketbase_${PB_VERSION}_linux_arm64.zip"
 PB_URL="https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/${PB_ZIP}"
 
-OLLAMA_MODELS=("phi3.5" "nomic-embed-text")
+OLLAMA_MODEL_LIST=("phi3.5" "nomic-embed-text")
 
 HERMES_REPO="https://github.com/Caltongroup/GoldenImage_Files.git"
 
@@ -121,16 +121,23 @@ if [[ -f "${OLLAMA_SERVICE}" ]] && ! grep -q "OLLAMA_MODELS" "${OLLAMA_SERVICE}"
     ok "Ollama service patched: models → SSD"
 fi
 
+# Fix permissions so ollama user can traverse to model dir
+chmod 755 /home/pi
+chmod 755 "${DATA_DIR}"
+mkdir -p "${OLLAMA_MODELS_DIR}"
+chown -R ollama:ollama "${OLLAMA_MODELS_DIR}"
+
 systemctl enable ollama &>/dev/null
+systemctl daemon-reload
 systemctl restart ollama
-sleep 3
+sleep 5
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 4 — Pull models
 # ═══════════════════════════════════════════════════════════════════════════════
 info "Step 4/8 — Pulling Ollama models (this takes a while)"
 
-for model in "${OLLAMA_MODELS[@]}"; do
+for model in "${OLLAMA_MODEL_LIST[@]}"; do
     if ollama list 2>/dev/null | grep -q "^${model}"; then
         ok "Model already present: ${model}"
     else
