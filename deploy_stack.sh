@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy_stack.sh — Agent in a Box: Full Stack Deployer
+# deploy_stack.sh — Agent in a Box: Full Stack Deployer v2
 # Target: Orange Pi 5 Pro (RK3588S, ARM64) running Armbian Trixie
 # Idempotent: safe to run multiple times
 # Usage: sudo bash deploy_stack.sh
@@ -26,46 +26,51 @@ DATA_DIR="/home/pi/data"
 NVME_DEV="/dev/nvme0n1"
 OLLAMA_MODELS_DIR="${DATA_DIR}/ollama"
 PB_DIR="${DATA_DIR}/pocketbase"
-HERMES_DIR="${DATA_DIR}/hermes"
 AGENTS_DIR="${DATA_DIR}/agents"
-DOCS_DIR="${DATA_DIR}/documents"
 VENV_DIR="${DATA_DIR}/venv"
+LLAMA_DIR="${DATA_DIR}/llama.cpp"
+LLAMA_BIN="${LLAMA_DIR}/build/bin/llama-server"
 
 PB_VERSION="0.23.4"
 PB_ZIP="pocketbase_${PB_VERSION}_linux_arm64.zip"
 PB_URL="https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/${PB_ZIP}"
 
-OLLAMA_MODEL_LIST=("phi3.5" "nomic-embed-text")
+INFERENCE_MODEL="qwen2.5:1.5b"
+EMBED_MODEL="nomic-embed-text"
 
-HERMES_REPO="https://github.com/Caltongroup/GoldenImage_Files.git"
+LLAMA_PORT=8080
+WEB_PORT=5000
 
 # ── Root check ────────────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || die "Run as root: sudo bash deploy_stack.sh"
 
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║     Agent in a Box — Stack Deployer      ║${NC}"
+echo -e "${CYAN}║   Agent in a Box — Stack Deployer v2     ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 1 — System packages
 # ═══════════════════════════════════════════════════════════════════════════════
-info "Step 1/8 — Installing system dependencies"
+info "Step 1/10 — Installing system dependencies"
 apt-get update -qq
-apt-get install -y -qq curl wget unzip zstd python3 python3-pip python3-venv lshw git
+apt-get install -y -qq \
+    curl wget unzip zstd git lshw \
+    python3 python3-pip python3-venv \
+    cmake build-essential \
+    glslang-tools
 ok "System packages ready"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 2 — NVMe SSD mount
 # ═══════════════════════════════════════════════════════════════════════════════
-info "Step 2/8 — NVMe SSD"
+info "Step 2/10 — NVMe SSD"
 
 if ! lsblk | grep -q nvme0n1; then
     die "NVMe device ${NVME_DEV} not found. Is the SSD seated properly?"
 fi
 
-# Format only if no filesystem present
 if ! blkid "${NVME_DEV}" &>/dev/null; then
     info "No filesystem on ${NVME_DEV} — formatting ext4"
     mkfs.ext4 -q "${NVME_DEV}"
@@ -74,7 +79,6 @@ else
     ok "Filesystem already exists on ${NVME_DEV}"
 fi
 
-# Mount if not already mounted
 if ! mountpoint -q "${DATA_DIR}"; then
     mkdir -p "${DATA_DIR}"
     mount "${NVME_DEV}" "${DATA_DIR}"
@@ -83,7 +87,6 @@ else
     ok "${DATA_DIR} already mounted"
 fi
 
-# fstab entry (idempotent)
 if ! grep -q "${NVME_DEV}" /etc/fstab; then
     echo "${NVME_DEV} ${DATA_DIR} ext4 defaults 0 2" >> /etc/fstab
     ok "Added fstab entry"
@@ -91,16 +94,15 @@ else
     ok "fstab entry already present"
 fi
 
-# Directory structure
-mkdir -p "${OLLAMA_MODELS_DIR}" "${PB_DIR}" "${HERMES_DIR}" "${AGENTS_DIR}" "${DOCS_DIR}"
+mkdir -p "${OLLAMA_MODELS_DIR}" "${PB_DIR}" "${AGENTS_DIR}" "${VENV_DIR}"
+chmod 755 /home/pi "${DATA_DIR}"
 ok "SSD directory structure ready"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 3 — Ollama
+# STEP 3 — Ollama (embeddings only)
 # ═══════════════════════════════════════════════════════════════════════════════
-info "Step 3/8 — Ollama"
+info "Step 3/10 — Ollama (embeddings + model download)"
 
-# Pin model storage to SSD before install
 if ! grep -q "OLLAMA_MODELS" /etc/environment; then
     echo "OLLAMA_MODELS=${OLLAMA_MODELS_DIR}" >> /etc/environment
 fi
@@ -113,17 +115,12 @@ else
     ok "Ollama installed"
 fi
 
-# Patch systemd service to use SSD for models
 OLLAMA_SERVICE="/etc/systemd/system/ollama.service"
 if [[ -f "${OLLAMA_SERVICE}" ]] && ! grep -q "OLLAMA_MODELS" "${OLLAMA_SERVICE}"; then
     sed -i '/\[Service\]/a Environment="OLLAMA_MODELS='"${OLLAMA_MODELS_DIR}"'"' "${OLLAMA_SERVICE}"
     systemctl daemon-reload
-    ok "Ollama service patched: models → SSD"
 fi
 
-# Fix permissions so ollama user can traverse to model dir
-chmod 755 /home/pi
-chmod 755 "${DATA_DIR}"
 mkdir -p "${OLLAMA_MODELS_DIR}"
 chown -R ollama:ollama "${OLLAMA_MODELS_DIR}"
 
@@ -131,13 +128,14 @@ systemctl enable ollama &>/dev/null
 systemctl daemon-reload
 systemctl restart ollama
 sleep 5
+ok "Ollama running"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 4 — Pull models
 # ═══════════════════════════════════════════════════════════════════════════════
-info "Step 4/8 — Pulling Ollama models (this takes a while)"
+info "Step 4/10 — Pulling models (this takes a while)"
 
-for model in "${OLLAMA_MODEL_LIST[@]}"; do
+for model in "${EMBED_MODEL}" "${INFERENCE_MODEL}"; do
     if ollama list 2>/dev/null | grep -q "^${model}"; then
         ok "Model already present: ${model}"
     else
@@ -147,10 +145,77 @@ for model in "${OLLAMA_MODEL_LIST[@]}"; do
     fi
 done
 
+# Find the inference model blob for llama-server
+MODEL_BLOB=$(find "${OLLAMA_MODELS_DIR}/blobs" -name "sha256-*" -size +500M 2>/dev/null | head -1)
+if [[ -z "${MODEL_BLOB}" ]]; then
+    die "Could not find model blob in ${OLLAMA_MODELS_DIR}/blobs — did the pull succeed?"
+fi
+ok "Model blob: ${MODEL_BLOB}"
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 5 — PocketBase
+# STEP 5 — llama.cpp (compile from source)
 # ═══════════════════════════════════════════════════════════════════════════════
-info "Step 5/8 — PocketBase v${PB_VERSION}"
+info "Step 5/10 — llama.cpp (compile from source — ~15 minutes)"
+
+if [[ -f "${LLAMA_BIN}" ]]; then
+    ok "llama-server already compiled: ${LLAMA_BIN}"
+else
+    if [[ ! -d "${LLAMA_DIR}/.git" ]]; then
+        info "Cloning llama.cpp..."
+        git clone --quiet https://github.com/ggerganov/llama.cpp "${LLAMA_DIR}"
+    fi
+    info "Compiling with GGML_NATIVE=ON (ARM NEON optimizations)..."
+    cmake -B "${LLAMA_DIR}/build" \
+        -DGGML_NATIVE=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -S "${LLAMA_DIR}" \
+        -Wno-dev > /dev/null 2>&1
+    cmake --build "${LLAMA_DIR}/build" \
+        --config Release -j4 > /dev/null 2>&1
+    ok "llama-server compiled → ${LLAMA_BIN}"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 6 — llama-server systemd service
+# ═══════════════════════════════════════════════════════════════════════════════
+info "Step 6/10 — llama-server service"
+
+LLAMA_SERVICE="/etc/systemd/system/llama-server.service"
+if [[ ! -f "${LLAMA_SERVICE}" ]]; then
+    cat > "${LLAMA_SERVICE}" << EOF
+[Unit]
+Description=llama.cpp inference server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+ExecStart=${LLAMA_BIN} --model ${MODEL_BLOB} --ctx-size 2048 --threads 8 --port ${LLAMA_PORT} --host 127.0.0.1 --log-disable
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable llama-server
+    ok "llama-server service created and enabled"
+else
+    ok "llama-server service already exists"
+fi
+
+systemctl start llama-server
+sleep 5
+if curl -sf http://127.0.0.1:${LLAMA_PORT}/health > /dev/null; then
+    ok "llama-server running on :${LLAMA_PORT}"
+else
+    warn "llama-server may still be loading — check: systemctl status llama-server"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 7 — PocketBase
+# ═══════════════════════════════════════════════════════════════════════════════
+info "Step 7/10 — PocketBase v${PB_VERSION}"
 
 if [[ -f "${PB_DIR}/pocketbase" ]]; then
     ok "PocketBase binary already present"
@@ -163,7 +228,6 @@ else
     ok "PocketBase installed → ${PB_DIR}"
 fi
 
-# Systemd service for PocketBase
 PB_SERVICE="/etc/systemd/system/pocketbase.service"
 if [[ ! -f "${PB_SERVICE}" ]]; then
     cat > "${PB_SERVICE}" << EOF
@@ -178,8 +242,6 @@ WorkingDirectory=${PB_DIR}
 ExecStart=${PB_DIR}/pocketbase serve --http=0.0.0.0:8090
 Restart=always
 RestartSec=5
-StandardOutput=journal
-StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -196,63 +258,88 @@ sleep 2
 ok "PocketBase running on :8090"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 6 — Python venv + AgentSoul SDK
+# STEP 8 — Python venv + packages
 # ═══════════════════════════════════════════════════════════════════════════════
-info "Step 6/8 — Python venv + AgentSoul SDK"
+info "Step 8/10 — Python venv"
 
-if [[ ! -d "${VENV_DIR}" ]]; then
+if [[ ! -d "${VENV_DIR}/bin" ]]; then
     python3 -m venv "${VENV_DIR}"
     ok "Created venv → ${VENV_DIR}"
 else
     ok "Venv already exists"
 fi
 
-# Activate and install
 source "${VENV_DIR}/bin/activate"
-
 pip install --quiet --upgrade pip
-pip install --quiet agentsoul chromadb requests pyyaml
-
+pip install --quiet \
+    flask \
+    chromadb \
+    requests \
+    pyyaml \
+    pdfplumber \
+    python-docx \
+    openpyxl \
+    agentsoul
 ok "Python packages installed"
 deactivate
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 7 — Hermes core
+# STEP 9 — Copy agent scripts from repo
 # ═══════════════════════════════════════════════════════════════════════════════
-info "Step 7/8 — Hermes core"
+info "Step 9/10 — Agent scripts"
 
-if [[ -d "${HERMES_DIR}/.git" ]]; then
-    info "Hermes repo exists — pulling latest"
-    git -C "${HERMES_DIR}" pull --quiet
-    ok "Hermes updated"
-else
-    info "Cloning Hermes from ${HERMES_REPO}"
-    if git clone --quiet "${HERMES_REPO}" "${HERMES_DIR}" 2>/dev/null; then
-        ok "Hermes cloned → ${HERMES_DIR}"
+REPO_RAW="https://raw.githubusercontent.com/Caltongroup/agent-in-a-box/main"
+
+for script in web_ui.py ingest.py onboard_wizard.py; do
+    if [[ ! -f "${DATA_DIR}/${script}" ]]; then
+        info "Downloading ${script}..."
+        curl -fsSL "${REPO_RAW}/${script}" -o "${DATA_DIR}/${script}"
+        ok "Downloaded: ${script}"
     else
-        warn "Could not clone Hermes repo (check network/auth). Skipping — run manually."
+        ok "Already present: ${script}"
     fi
+done
+
+# Patch web_ui.py to use llama-server on correct port
+sed -i "s|LLAMA_URL.*=.*\"http://127.0.0.1:8080\"|LLAMA_URL   = \"http://127.0.0.1:${LLAMA_PORT}\"|" "${DATA_DIR}/web_ui.py" 2>/dev/null || true
+sed -i 's|MODEL.*=.*"qwen2.5:1.5b"|MODEL        = "qwen2.5:1.5b"|' "${DATA_DIR}/web_ui.py" 2>/dev/null || true
+sed -i 's|"model":.*"local"|"model":      MODEL|g' "${DATA_DIR}/web_ui.py" 2>/dev/null || true
+sed -i 's|NUM_PREDICT.*=.*120|NUM_PREDICT  = 300|' "${DATA_DIR}/web_ui.py" 2>/dev/null || true
+ok "Agent scripts ready"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 10 — Tailscale
+# ═══════════════════════════════════════════════════════════════════════════════
+info "Step 10/10 — Tailscale"
+
+if command -v tailscale &>/dev/null; then
+    ok "Tailscale already installed: $(tailscale version 2>/dev/null | head -1)"
+else
+    curl -fsSL https://tailscale.com/install.sh | sh
+    systemctl enable tailscaled
+    ok "Tailscale installed — run 'tailscale up' to authenticate"
 fi
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 8 — Ownership + onboard wizard
-# ═══════════════════════════════════════════════════════════════════════════════
-info "Step 8/8 — Permissions"
+# ── Permissions ───────────────────────────────────────────────────────────────
 chown -R pi:pi "${DATA_DIR}"
 ok "Ownership set: pi:pi on ${DATA_DIR}"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
+PI_IP=$(hostname -I | awk '{print $1}')
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║         Stack deploy complete ✓          ║${NC}"
+echo -e "${GREEN}║       Stack deploy complete ✓            ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  NVMe mounted  : ${CYAN}${DATA_DIR}${NC}"
-echo -e "  Ollama models : ${CYAN}${OLLAMA_MODELS_DIR}${NC}"
-echo -e "  PocketBase    : ${CYAN}http://$(hostname -I | awk '{print $1}'):8090/_${NC}"
-echo -e "  Python venv   : ${CYAN}${VENV_DIR}${NC}"
-echo -e "  Agents home   : ${CYAN}${AGENTS_DIR}${NC}"
+echo -e "  NVMe mounted    : ${CYAN}${DATA_DIR}${NC}"
+echo -e "  llama-server    : ${CYAN}http://127.0.0.1:${LLAMA_PORT}${NC}"
+echo -e "  PocketBase      : ${CYAN}http://${PI_IP}:8090/_${NC}"
+echo -e "  Python venv     : ${CYAN}${VENV_DIR}${NC}"
+echo -e "  Agents home     : ${CYAN}${AGENTS_DIR}${NC}"
 echo ""
-echo -e "${YELLOW}Next step: run the onboarding wizard${NC}"
-echo -e "  ${CYAN}cd ${DATA_DIR} && source venv/bin/activate && python3 hermes/onboard_wizard.py${NC}"
+echo -e "${YELLOW}Next steps:${NC}"
+echo -e "  1. Run the onboarding wizard:"
+echo -e "     ${CYAN}cd ${DATA_DIR} && source venv/bin/activate && python3 onboard_wizard.py${NC}"
+echo -e "  2. Authenticate Tailscale:"
+echo -e "     ${CYAN}tailscale up${NC}"
 echo ""
