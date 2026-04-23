@@ -1,0 +1,472 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const LOGO = '/agentsoul-logo.png';
+
+const products = [
+  {
+    icon: '📦',
+    name: 'Agent in a Box',
+    tagline: 'Private AI for small business',
+    desc: 'A pre-configured AI agent ships to your door on local hardware. It knows your documents, answers your team\'s questions, and never sends data to the cloud.',
+    cta: 'Learn more',
+    href: '#agent-in-a-box',
+    color: 'border-violet-500',
+    badge: 'Available Now',
+    badgeColor: 'bg-violet-600',
+  },
+  {
+    icon: '🧠',
+    name: 'AgentSoul Platform',
+    tagline: 'Persistent memory infrastructure for AI',
+    desc: 'The memory backbone that makes any AI agent remember, grow, and stay consistent over time. License it for your own platform or enterprise deployment.',
+    cta: 'Contact us',
+    href: '#contact',
+    color: 'border-cyan-400',
+    badge: 'Enterprise',
+    badgeColor: 'bg-cyan-600',
+  },
+  {
+    icon: '🕯️',
+    name: 'SoulRecall',
+    tagline: 'Family memory, preserved forever',
+    desc: 'Persistent AI agents that carry family stories, voices, and personalities across generations. Where Ancestry meets AI. Plant your flag now.',
+    cta: 'Join the waitlist',
+    href: '#contact',
+    color: 'border-amber-400',
+    badge: 'Coming Soon',
+    badgeColor: 'bg-amber-600',
+  },
+];
+
+const verticals = [
+  { icon: '👥', name: 'Human Resources', desc: 'Answer policy questions, onboarding guides, benefits lookups — instantly. Your handbook, always available.' },
+  { icon: '🔧', name: 'HVAC & Trades', desc: 'Equipment manuals, service procedures, warranty lookups. Field techs get answers in seconds, not phone calls.' },
+  { icon: '🦷', name: 'Dental Practice', desc: 'Patient FAQs, insurance coverage, procedure prep. Front desk handles more with less back-and-forth.' },
+  { icon: '🚗', name: 'Auto Shop', desc: 'Labor rates, common repairs, parts info. Customers get real answers while your techs stay in the bay.' },
+  { icon: '❤️', name: 'Senior Care', desc: 'Care plans, medication schedules, family communication. Staff have what they need at the point of care.' },
+  { icon: '📻', name: 'Media & Radio', desc: 'Rundowns, ad copy, station policies. Your team stays on-brand and on-schedule without hunting for files.' },
+];
+
+const steps = [
+  { num: '01', title: 'Deploy', desc: 'We ship a pre-configured box or spin up a cloud instance. One script, 20 minutes, done.' },
+  { num: '02', title: 'Onboard', desc: 'Run the wizard. Tell it your business name, industry, and drop in your documents. No coding.' },
+  { num: '03', title: 'Ask', desc: 'Open a browser, start chatting. Your team gets instant, accurate answers from your own data.' },
+];
+
+const pricing = [
+  {
+    name: 'The Box',
+    price: '$750',
+    sub: 'one-time setup',
+    monthly: '$99–$125/mo Care Plan',
+    color: 'border-violet-500',
+    badge: 'Privacy First',
+    badgeColor: 'bg-violet-500',
+    features: [
+      'Orange Pi 5 Pro hardware, pre-loaded',
+      'Private AI — runs 100% offline',
+      'Unlimited users on your network',
+      'Your data never leaves your building',
+      'Remote support via Tailscale',
+      'Care Plan includes updates & priority support',
+    ],
+    cta: 'Get a Quote',
+    href: '#contact',
+  },
+  {
+    name: 'Cloud',
+    price: 'From $125',
+    sub: 'per month',
+    monthly: 'No hardware to manage',
+    color: 'border-cyan-400',
+    badge: 'Fast Setup',
+    badgeColor: 'bg-cyan-500',
+    features: [
+      'Hosted on dedicated private server',
+      'Access from anywhere, any device',
+      'SSL + bot protection included',
+      'Same AI model, same privacy promise',
+      'Subdomain on agentsoul.dev',
+      'Scales as your team grows',
+    ],
+    cta: 'Get a Quote',
+    href: '#contact',
+  },
+];
+
+const demoPrompts = [
+  'What does an oil change cost?',
+  'What are your hours?',
+  'Do you offer a warranty on repairs?',
+  'How does AgentSoul work?',
+];
+---
+
+<Layout>
+
+  <!-- NAV -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur border-b border-gray-800">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <img src={LOGO} alt="AgentSoul" class="h-10 w-auto" />
+      <div class="hidden md:flex items-center gap-8 text-sm text-gray-400">
+        <a href="#products" class="hover:text-white transition-colors">Products</a>
+        <a href="#agent-in-a-box" class="hover:text-white transition-colors">Agent in a Box</a>
+        <a href="#demo" class="hover:text-white transition-colors">Demo</a>
+        <a href="#pricing" class="hover:text-white transition-colors">Pricing</a>
+        <a href="#contact" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">Get Started</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-16 relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-violet-600/15 rounded-full blur-3xl"></div>
+      <div class="absolute top-2/3 left-1/4 w-[400px] h-[400px] bg-cyan-600/10 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="relative z-10 max-w-4xl mx-auto">
+      <img src={LOGO} alt="AgentSoul" class="h-40 w-auto mx-auto mb-8" />
+
+      <div class="inline-flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-full px-4 py-1.5 text-sm text-gray-300 mb-6">
+        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+        AI that remembers — for business, for life
+      </div>
+
+      <h1 class="text-5xl md:text-7xl font-extrabold leading-tight mb-6">
+        Your business.<br />
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-cyan-400">Your AI.</span><br />
+        Your soul.
+      </h1>
+
+      <p class="text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+        AgentSoul builds AI agents that persist, remember, and grow — privately, on your terms.
+        From the shop floor to your family's story.
+      </p>
+
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="#products" class="bg-violet-600 hover:bg-violet-500 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-colors">
+          See Our Products
+        </a>
+        <a href="#demo" class="bg-gray-800 hover:bg-gray-700 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-colors border border-gray-700">
+          Try a Live Demo
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- THREE PRODUCTS -->
+  <section id="products" class="py-24 px-6 bg-gray-900/50">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl font-bold mb-4">Three products. One memory layer.</h2>
+        <p class="text-gray-400 text-lg max-w-2xl mx-auto">AgentSoul is the persistent memory backbone. Everything we build runs on it.</p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+        {products.map((p) => (
+          <div class={`bg-gray-800/50 border-2 ${p.color} rounded-2xl p-8 flex flex-col hover:bg-gray-800/80 transition-all`}>
+            <div class="flex items-start justify-between mb-4">
+              <span class="text-4xl">{p.icon}</span>
+              <span class={`${p.badgeColor} text-white text-xs font-semibold px-3 py-1 rounded-full`}>{p.badge}</span>
+            </div>
+            <h3 class="text-2xl font-bold mb-1">{p.name}</h3>
+            <p class="text-sm text-gray-500 mb-4 italic">{p.tagline}</p>
+            <p class="text-gray-400 text-sm leading-relaxed flex-1 mb-6">{p.desc}</p>
+            <a href={p.href} class="block text-center bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl font-semibold text-sm transition-colors">
+              {p.cta}
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- AGENT IN A BOX DEEP DIVE -->
+  <section id="agent-in-a-box" class="py-24 px-6">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16">
+        <div class="inline-flex items-center gap-2 bg-violet-900/40 border border-violet-700 rounded-full px-4 py-1.5 text-sm text-violet-300 mb-6">
+          📦 Agent in a Box
+        </div>
+        <h2 class="text-4xl font-bold mb-4">Private AI for any small business</h2>
+        <p class="text-gray-400 text-lg max-w-xl mx-auto">No IT department. No cloud. No subscriptions. Your documents, your agent, your building.</p>
+      </div>
+
+      <!-- How it works -->
+      <div class="grid md:grid-cols-3 gap-8 mb-20">
+        {steps.map((step) => (
+          <div class="relative bg-gray-800/50 border border-gray-700 rounded-2xl p-8 hover:border-violet-500/50 transition-colors">
+            <div class="text-6xl font-black text-gray-700 mb-4">{step.num}</div>
+            <h3 class="text-2xl font-bold mb-3">{step.title}</h3>
+            <p class="text-gray-400 leading-relaxed">{step.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      <!-- Verticals -->
+      <div class="text-center mb-12">
+        <h3 class="text-3xl font-bold mb-3">Built for your industry</h3>
+        <p class="text-gray-400 max-w-xl mx-auto">Every deployment is configured for your vertical. Your documents, your rules, your personality.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {verticals.map((v) => (
+          <div class="bg-gray-800/40 border border-gray-700 rounded-2xl p-6 hover:border-violet-500/50 hover:bg-gray-800/70 transition-all cursor-default">
+            <div class="text-4xl mb-4">{v.icon}</div>
+            <h3 class="text-xl font-bold mb-2">{v.name}</h3>
+            <p class="text-gray-400 text-sm leading-relaxed">{v.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      <p class="text-center text-gray-500 mt-8 text-sm">Don't see your industry? AgentSoul works for any business with documents, policies, or knowledge to share.</p>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section id="demo" class="py-24 px-6 bg-gray-900/50">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-12">
+        <div class="inline-flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-full px-4 py-1.5 text-sm text-gray-300 mb-6">
+          🚗 Live Demo — Mesa Auto & Tire, Boise ID
+        </div>
+        <h2 class="text-4xl font-bold mb-4">Talk to a real AgentSoul agent</h2>
+        <p class="text-gray-400 text-lg">This agent is loaded with Mesa Auto & Tire's service menu, labor rates, and shop policies. Ask it anything a customer or staff member would ask.</p>
+      </div>
+
+      <!-- Suggestion chips -->
+      <div class="flex flex-wrap gap-3 justify-center mb-8">
+        {demoPrompts.map((prompt) => (
+          <button
+            class="demo-chip bg-gray-800 hover:bg-violet-900/50 border border-gray-600 hover:border-violet-500 text-gray-300 hover:text-white text-sm px-4 py-2 rounded-full transition-all"
+            data-prompt={prompt}
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+
+      <!-- Chat Widget -->
+      <div class="bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden shadow-2xl">
+        <!-- Chat header -->
+        <div class="bg-gray-900 border-b border-gray-700 px-6 py-4 flex items-center gap-3">
+          <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+          <div>
+            <div class="font-semibold text-sm">Mesa Auto & Tire</div>
+            <div class="text-xs text-gray-500">AgentSoul Agent · Powered by local AI</div>
+          </div>
+        </div>
+
+        <!-- Chat messages -->
+        <div id="chat-messages" class="h-80 overflow-y-auto p-6 space-y-4 flex flex-col">
+          <div class="flex gap-3">
+            <div class="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center text-sm font-bold shrink-0">M</div>
+            <div class="bg-gray-700 rounded-2xl rounded-tl-none px-4 py-3 max-w-md text-sm text-gray-200 leading-relaxed">
+              Hey! I'm the AgentSoul agent for Mesa Auto & Tire. I know our full service menu, pricing, hours, and shop policies. What can I help you with?
+            </div>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="border-t border-gray-700 p-4 flex gap-3">
+          <input
+            id="chat-input"
+            type="text"
+            placeholder="Ask about services, pricing, hours..."
+            class="flex-1 bg-gray-700 border border-gray-600 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors"
+          />
+          <button
+            id="chat-send"
+            class="bg-violet-600 hover:bg-violet-500 text-white px-5 py-3 rounded-xl font-medium text-sm transition-colors"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+
+      <p class="text-center text-gray-600 text-xs mt-4">This is a cloud-hosted demo. Your own AgentSoul agent runs privately on hardware inside your business.</p>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section id="pricing" class="py-24 px-6">
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl font-bold mb-4">Simple pricing</h2>
+        <p class="text-gray-400 text-lg">Own the hardware. Or let us host it. Either way, your data stays yours.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        {pricing.map((plan) => (
+          <div class={`bg-gray-800/50 border-2 ${plan.color} rounded-2xl p-8 flex flex-col`}>
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="text-2xl font-bold">{plan.name}</h3>
+              <span class={`${plan.badgeColor} text-white text-xs font-semibold px-3 py-1 rounded-full`}>{plan.badge}</span>
+            </div>
+            <div class="mb-6">
+              <span class="text-3xl font-black">{plan.price}</span>
+              <span class="text-gray-500 text-sm ml-2">{plan.sub}</span>
+              <div class="text-cyan-400 text-sm mt-1 font-medium">{plan.monthly}</div>
+            </div>
+            <ul class="space-y-3 mb-8 flex-1">
+              {plan.features.map((f) => (
+                <li class="flex items-start gap-3 text-sm text-gray-300">
+                  <span class="text-green-400 mt-0.5">✓</span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <a href={plan.href} class="block text-center bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl font-semibold transition-colors">
+              {plan.cta}
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact" class="py-24 px-6 bg-gray-900/50">
+    <div class="max-w-2xl mx-auto">
+      <div class="text-center mb-12">
+        <h2 class="text-4xl font-bold mb-4">Let's talk</h2>
+        <p class="text-gray-400 text-lg">Tell us about your business and we'll put together the right setup.</p>
+      </div>
+
+      <form class="space-y-5" name="contact" method="POST" action="mailto:admin@caltongroup.com" enctype="text/plain">
+        <div class="grid md:grid-cols-2 gap-5">
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">Name</label>
+            <input type="text" name="name" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 transition-colors" placeholder="Jane Smith" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">Email</label>
+            <input type="email" name="email" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 transition-colors" placeholder="jane@company.com" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">Business / Industry</label>
+          <input type="text" name="business" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 transition-colors" placeholder="Acme HVAC — 12 employees" />
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">What would your agent need to know?</label>
+          <textarea name="message" rows="4" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 transition-colors resize-none" placeholder="We have an employee handbook, service manuals, and pricing sheets..."></textarea>
+        </div>
+        <button type="submit" class="w-full bg-violet-600 hover:bg-violet-500 text-white py-4 rounded-xl font-semibold text-lg transition-colors">
+          Send Message
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-gray-800 py-10 px-6">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+      <div class="flex items-center gap-3">
+        <img src={LOGO} alt="AgentSoul" class="h-6 w-auto opacity-70" />
+        <span>© 2026 AgentSoul. A product of Calton Group LLC.</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="https://github.com/Caltongroup/agent-in-a-box" class="hover:text-white transition-colors">GitHub</a>
+        <a href="#contact" class="hover:text-white transition-colors">Contact</a>
+        <span class="text-gray-700">agentsoul.dev</span>
+      </div>
+    </div>
+  </footer>
+
+</Layout>
+
+<!-- Chat widget script -->
+<script>
+  const input = document.getElementById('chat-input') as HTMLInputElement;
+  const send = document.getElementById('chat-send') as HTMLButtonElement;
+  const messages = document.getElementById('chat-messages') as HTMLDivElement;
+  const chips = document.querySelectorAll('.demo-chip');
+
+  const DEMO_ENDPOINT = 'https://demo.agentsoul.dev/chat';
+
+  function addMessage(text: string, role: 'user' | 'agent') {
+    const wrap = document.createElement('div');
+    wrap.className = 'flex gap-3' + (role === 'user' ? ' flex-row-reverse' : '');
+
+    const avatar = document.createElement('div');
+    avatar.className = role === 'agent'
+      ? 'w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center text-sm font-bold shrink-0'
+      : 'w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center text-sm font-bold shrink-0';
+    avatar.textContent = role === 'agent' ? 'M' : 'You';
+
+    const bubble = document.createElement('div');
+    bubble.className = role === 'agent'
+      ? 'bg-gray-700 rounded-2xl rounded-tl-none px-4 py-3 max-w-md text-sm text-gray-200 leading-relaxed'
+      : 'bg-violet-700 rounded-2xl rounded-tr-none px-4 py-3 max-w-md text-sm text-white leading-relaxed';
+    bubble.textContent = text;
+
+    wrap.appendChild(avatar);
+    wrap.appendChild(bubble);
+    messages.appendChild(wrap);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function addTyping() {
+    const wrap = document.createElement('div');
+    wrap.id = 'typing-indicator';
+    wrap.className = 'flex gap-3';
+    wrap.innerHTML = `
+      <div class="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center text-sm font-bold shrink-0">M</div>
+      <div class="bg-gray-700 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-gray-400 italic">Thinking...</div>
+    `;
+    messages.appendChild(wrap);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function removeTyping() {
+    document.getElementById('typing-indicator')?.remove();
+  }
+
+  async function sendMessage(text?: string) {
+    const msg = (text || input.value).trim();
+    if (!msg) return;
+
+    addMessage(msg, 'user');
+    input.value = '';
+    send.disabled = true;
+    send.textContent = '...';
+    addTyping();
+
+    try {
+      const res = await fetch(DEMO_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg }),
+      });
+
+      removeTyping();
+
+      if (!res.ok) throw new Error('Demo offline');
+
+      const data = await res.json();
+      addMessage(data.response || 'No response', 'agent');
+    } catch {
+      removeTyping();
+      addMessage('The live demo is having trouble connecting. Reach out at admin@caltongroup.com for a personal walkthrough!', 'agent');
+    }
+
+    send.disabled = false;
+    send.textContent = 'Send';
+  }
+
+  send.addEventListener('click', () => sendMessage());
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  // Suggestion chips
+  chips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const prompt = (chip as HTMLElement).dataset.prompt || '';
+      sendMessage(prompt);
+    });
+  });
+</script>

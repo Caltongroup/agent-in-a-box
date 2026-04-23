@@ -4,7 +4,7 @@ Flask backend for voice interface MVP - WIRED VERSION
 Connects to Hermes gateway for real LLM responses and ElevenLabs for TTS
 """
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, make_response
 from summarize import summarize_for_tts, estimate_tts_credits
 import os
 import io
@@ -43,6 +43,15 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return response
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        return response
 
 @app.route('/health', methods=['GET', 'OPTIONS'])
 def health():

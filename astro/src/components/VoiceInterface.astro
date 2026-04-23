@@ -1,0 +1,414 @@
+---
+// components/VoiceInterface.astro
+// Day 6: Full voice interface component for voice.agentsoul.dev
+
+interface VoiceMetadata {
+  original_chars: number;
+  summary_chars: number;
+  reduction_percent: number;
+  credits_original: number;
+  credits_summary: number;
+  response_type: string;
+}
+
+interface ChatResponse {
+  full: string;
+  summary_for_tts: string;
+  metadata: VoiceMetadata;
+}
+---
+
+<div class="voice-interface">
+  <div class="header">
+    <h1>🎤 Archer Voice Interface</h1>
+    <p class="subtitle">Talk to Archer while driving. Powered by summarization + ElevenLabs TTS.</p>
+  </div>
+
+  <div class="status-panel">
+    <div class="status-item">
+      <span class="label">Connection:</span>
+      <span class="value" id="connection-status">🔄 Checking...</span>
+    </div>
+    <div class="status-item">
+      <span class="label">Microphone:</span>
+      <span class="value" id="mic-status">🔄 Checking...</span>
+    </div>
+    <div class="status-item">
+      <span class="label">Credits Used:</span>
+      <span class="value" id="credits-used">0</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="start-btn" class="primary-btn">
+      🎤 Start Recording
+    </button>
+    <button id="stop-btn" class="secondary-btn" disabled>
+      ⏹️ Stop Recording
+    </button>
+  </div>
+
+  <div class="transcription-display">
+    <div class="label">Your Question:</div>
+    <div id="transcription" class="text-box">(Listening...)</div>
+  </div>
+
+  <div class="response-display" id="response-display" style="display: none;">
+    <div class="label">Archer's Response (Speaking):</div>
+    <div id="response-text" class="text-box"></div>
+    <div class="metadata">
+      <span>📊 Full: <span id="meta-original">-</span> chars</span>
+      <span>📉 Summary: <span id="meta-summary">-</span> chars (<span id="meta-reduction">-</span>%)</span>
+      <span>💰 Credits: <span id="meta-credits">-</span></span>
+    </div>
+    <audio id="response-audio" controls></audio>
+  </div>
+
+  <div class="info-panel">
+    <h3>ℹ️ How it works</h3>
+    <ul>
+      <li>Click "Start Recording" and speak your question</li>
+      <li>Your speech is transcribed using Web Speech API</li>
+      <li>Archer generates a response via orchestrator</li>
+      <li>Response is summarized (60-75% reduction)</li>
+      <li>Summary is converted to speech (ElevenLabs)</li>
+      <li>Audio plays back through your device</li>
+      <li>💰 Credits saved by summarization</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition: SpeechRecognition | null = null;
+  const API_URL = window.location.hostname === 'localhost' ? 'http://127.0.0.1:5000' : 'https://voice.agentsoul.dev';
+  
+  // Initialize on page load
+  document.addEventListener('DOMContentLoaded', async () => {
+    await initializeCapabilities();
+    setupEventListeners();
+  });
+
+  async function initializeCapabilities() {
+    // Check Speech API
+    if (SpeechRecognition) {
+      document.getElementById('connection-status')!.textContent = '✅ Ready';
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.onresult = handleSpeechResult;
+    } else {
+      document.getElementById('connection-status')!.textContent = '❌ Not supported';
+    }
+
+    // Check microphone
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      document.getElementById('mic-status')!.textContent = '✅ Available';
+    } catch {
+      document.getElementById('mic-status')!.textContent = '❌ Denied';
+    }
+
+    // Check backend
+    try {
+      const resp = await fetch(`${API_URL}/health`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.tts_ready) {
+          document.getElementById('connection-status')!.textContent = '✅ Connected (TTS Ready)';
+        }
+      }
+    } catch (err) {
+      document.getElementById('connection-status')!.textContent = '❌ Backend offline';
+    }
+  }
+
+  function setupEventListeners() {
+    document.getElementById('start-btn')!.addEventListener('click', startListening);
+    document.getElementById('stop-btn')!.addEventListener('click', stopListening);
+  }
+
+  function startListening() {
+    if (!recognition) {
+      alert('Speech Recognition not supported');
+      return;
+    }
+
+    document.getElementById('transcription')!.textContent = '(Listening...)';
+    document.getElementById('start-btn')!.disabled = true;
+    document.getElementById('stop-btn')!.disabled = false;
+
+    recognition.start();
+  }
+
+  function stopListening() {
+    if (recognition) {
+      recognition.stop();
+    }
+    document.getElementById('start-btn')!.disabled = false;
+    document.getElementById('stop-btn')!.disabled = true;
+  }
+
+  function handleSpeechResult(event: SpeechRecognitionEvent) {
+    let interimTranscript = '';
+    
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      
+      if (event.results[i].isFinal) {
+        // Send final transcript to Archer
+        sendToArcher(transcript);
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+    
+    if (interimTranscript) {
+      document.getElementById('transcription')!.textContent = interimTranscript;
+    }
+  }
+
+  async function sendToArcher(text: string) {
+    document.getElementById('transcription')!.textContent = text;
+    
+    try {
+      // Get response from Archer
+      const resp = await fetch(`${API_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!resp.ok) throw new Error('Chat failed');
+      
+      const data: ChatResponse = await resp.json();
+      
+      // Display response metadata
+      displayResponse(data);
+      
+      // Get audio
+      await playAudio(data.summary_for_tts);
+      
+    } catch (err) {
+      document.getElementById('response-text')!.textContent = `Error: ${err}`;
+    }
+  }
+
+  function displayResponse(data: ChatResponse) {
+    const display = document.getElementById('response-display')!;
+    display.style.display = 'block';
+    
+    document.getElementById('response-text')!.textContent = data.summary_for_tts;
+    document.getElementById('meta-original')!.textContent = data.metadata.original_chars.toString();
+    document.getElementById('meta-summary')!.textContent = data.metadata.summary_chars.toString();
+    document.getElementById('meta-reduction')!.textContent = data.metadata.reduction_percent.toString();
+    document.getElementById('meta-credits')!.textContent = 
+      `${data.metadata.credits_original} → ${data.metadata.credits_summary}`;
+    
+    // Update total credits used
+    const current = parseInt(document.getElementById('credits-used')!.textContent || '0');
+    document.getElementById('credits-used')!.textContent = 
+      (current + data.metadata.credits_summary).toString();
+  }
+
+  async function playAudio(text: string) {
+    try {
+      const ttsResp = await fetch(`${API_URL}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!ttsResp.ok) throw new Error('TTS failed');
+      
+      const audioBlob = await ttsResp.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      const audioElement = document.getElementById('response-audio') as HTMLAudioElement;
+      audioElement.src = audioUrl;
+      audioElement.play();
+      
+    } catch (err) {
+      console.error('Audio playback error:', err);
+    }
+  }
+</script>
+
+<style>
+  .voice-interface {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .header h1 {
+    font-size: 32px;
+    color: #00d9ff;
+    margin-bottom: 10px;
+  }
+
+  .subtitle {
+    color: #aaa;
+    font-size: 14px;
+  }
+
+  .status-panel {
+    background: rgba(0, 217, 255, 0.05);
+    border: 1px solid #00d9ff;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .status-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .status-item .label {
+    color: #00d9ff;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .status-item .value {
+    color: #fff;
+    font-size: 14px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 30px;
+  }
+
+  .primary-btn,
+  .secondary-btn {
+    flex: 1;
+    padding: 16px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s;
+  }
+
+  .primary-btn {
+    background: #00d9ff;
+    color: #000;
+  }
+
+  .primary-btn:hover:not(:disabled) {
+    background: #00ffff;
+    transform: scale(1.02);
+  }
+
+  .primary-btn:disabled {
+    opacity: 0.5;
+  }
+
+  .secondary-btn {
+    background: #ff0055;
+    color: #fff;
+  }
+
+  .secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .transcription-display,
+  .response-display {
+    margin-bottom: 24px;
+  }
+
+  .label {
+    color: #00d9ff;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .text-box {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid #00d9ff;
+    border-radius: 8px;
+    padding: 16px;
+    min-height: 60px;
+    color: #fff;
+    font-family: monospace;
+    font-size: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .metadata {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 217, 255, 0.2);
+    color: #aaa;
+    font-size: 12px;
+    font-family: monospace;
+  }
+
+  audio {
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .info-panel {
+    background: rgba(0, 217, 255, 0.05);
+    border: 1px solid #00d9ff;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 40px;
+  }
+
+  .info-panel h3 {
+    color: #00d9ff;
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+
+  .info-panel ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .info-panel li {
+    color: #aaa;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  @media (max-width: 600px) {
+    .header h1 {
+      font-size: 24px;
+    }
+
+    .status-panel {
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .controls {
+      flex-direction: column;
+    }
+  }
+</style>

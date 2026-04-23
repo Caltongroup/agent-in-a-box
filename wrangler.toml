@@ -1,0 +1,24 @@
+name = "voice-api"
+type = "service"
+
+[build]
+command = "npm install"
+
+[env.production]
+route = "voice-api.agentsoul.dev"
+zone_id = ""  # Will auto-detect
+
+[services]
+binding = "voice_api"
+service = "voice-api"
+environment = "production"
+
+# Tunnel configuration
+[[services]]
+service = "http"
+address = "localhost:5000"
+protocol = "http"
+
+[env.production.route]
+pattern = "voice-api.agentsoul.dev/*"
+zone_name = "agentsoul.dev"
