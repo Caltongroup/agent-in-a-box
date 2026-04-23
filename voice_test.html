@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Interface Test - Agent in a Box</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .input-group input,
+        .input-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 1em;
+            resize: vertical;
+        }
+        
+        .input-group input:focus,
+        .input-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .result h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .result pre {
+            background: #fff;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 5px 0;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .metric {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        
+        .metric-label {
+            color: #999;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            color: #333;
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+        
+        .audio-player {
+            margin: 15px 0;
+        }
+        
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 Voice Interface Test</h1>
+            <p>Agent in a Box — Real-time Chat + TTS</p>
+        </div>
+        
+        <!-- Chat Endpoint -->
+        <div class="card">
+            <h2>1. Chat Endpoint</h2>
+            <div class="input-group">
+                <label for="chat-input">Your Question</label>
+                <textarea id="chat-input" placeholder="Ask anything... Archer will respond with full answer + TTS summary."></textarea>
+            </div>
+            <div class="button-group">
+                <button id="chat-btn" onclick="chatTest()">Send Query</button>
+                <button id="chat-copy-btn" onclick="copyChatResult()" style="display: none; flex: 0 1 auto; width: auto;">Copy Result</button>
+            </div>
+            <div id="chat-result"></div>
+        </div>
+        
+        <!-- TTS Endpoint -->
+        <div class="card">
+            <h2>2. TTS Endpoint</h2>
+            <div class="input-group">
+                <label for="tts-input">Text to Synthesize</label>
+                <textarea id="tts-input" placeholder="Enter text to convert to speech..."></textarea>
+            </div>
+            <div class="button-group">
+                <button id="tts-btn" onclick="ttsTest()">Generate Audio</button>
+            </div>
+            <div id="tts-result"></div>
+        </div>
+        
+        <!-- Summarization Endpoint -->
+        <div class="card">
+            <h2>3. Summarization Endpoint</h2>
+            <div class="input-group">
+                <label for="summarize-input">Long Text</label>
+                <textarea id="summarize-input" placeholder="Paste a long text to summarize for TTS..." style="min-height: 120px;"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="max-sentences">Max Sentences</label>
+                <input type="number" id="max-sentences" value="3" min="1" max="10">
+            </div>
+            <div class="button-group">
+                <button id="summarize-btn" onclick="summarizeTest()">Summarize</button>
+            </div>
+            <div id="summarize-result"></div>
+        </div>
+        
+        <!-- Health Check -->
+        <div class="card">
+            <h2>4. System Health</h2>
+            <div class="button-group">
+                <button id="health-btn" onclick="healthCheck()">Check Health</button>
+            </div>
+            <div id="health-result"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://127.0.0.1:5000';
+        
+        async function chatTest() {
+            const input = document.getElementById('chat-input').value;
+            if (!input.trim()) {
+                alert('Please enter a question');
+                return;
+            }
+            
+            const btn = document.getElementById('chat-btn');
+            const resultDiv = document.getElementById('chat-result');
+            
+            btn.disabled = true;
+            resultDiv.innerHTML = '<div class="status pending"><span class="spinner"></span> Sending to Hermes gateway...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: input })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const meta = data.metadata;
+                    resultDiv.innerHTML = `
+                        <div class="status success">✓ Success</div>
+                        <div class="result">
+                            <h3>Full Response (${meta.original_chars} chars)</h3>
+                            <pre>${escapeHtml(data.full)}</pre>
+                            
+                            <h3 style="margin-top: 20px;">TTS Summary (${meta.summary_chars} chars)</h3>
+                            <pre>${escapeHtml(data.summary_for_tts)}</pre>
+                            
+                            <div class="metrics">
+                                <div class="metric">
+                                    <div class="metric-label">TTS Credits Original</div>
+                                    <div class="metric-value">${meta.credits_original}</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-label">TTS Credits Summary</div>
+                                    <div class="metric-value">${meta.credits_summary}</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-label">Reduction</div>
+                                    <div class="metric-value">${meta.reduction_percent.toFixed(1)}%</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-label">Sentences</div>
+                                    <div class="metric-value">${meta.sentences_kept}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('chat-copy-btn').style.display = 'inline-block';
+                } else {
+                    resultDiv.innerHTML = `<div class="status error">✗ Error: ${data.error}</div>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="status error">✗ Error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        async function ttsTest() {
+            const input = document.getElementById('tts-input').value;
+            if (!input.trim()) {
+                alert('Please enter text');
+                return;
+            }
+            
+            const btn = document.getElementById('tts-btn');
+            const resultDiv = document.getElementById('tts-result');
+            
+            btn.disabled = true;
+            resultDiv.innerHTML = '<div class="status pending"><span class="spinner"></span> Generating audio...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: input })
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    resultDiv.innerHTML = `
+                        <div class="status success">✓ Audio Generated (${(blob.size / 1024).toFixed(1)} KB)</div>
+                        <div class="audio-player">
+                            <audio controls>
+                                <source src="${url}" type="${blob.type}">
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                    `;
+                } else {
+                    const error = await response.json();
+                    resultDiv.innerHTML = `<div class="status error">✗ Error: ${error.error}</div>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="status error">✗ Error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        async function summarizeTest() {
+            const input = document.getElementById('summarize-input').value;
+            const maxSentences = parseInt(document.getElementById('max-sentences').value);
+            
+            if (!input.trim()) {
+                alert('Please enter text to summarize');
+                return;
+            }
+            
+            const btn = document.getElementById('summarize-btn');
+            const resultDiv = document.getElementById('summarize-result');
+            
+            btn.disabled = true;
+            resultDiv.innerHTML = '<div class="status pending"><span class="spinner"></span> Summarizing...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/summarize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: input, max_sentences: maxSentences })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const meta = data.metadata;
+                    resultDiv.innerHTML = `
+                        <div class="status success">✓ Success</div>
+                        <div class="result">
+                            <h3>Original (${meta.original_chars} chars)</h3>
+                            <pre>${escapeHtml(input.substring(0, 300))}...</pre>
+                            
+                            <h3 style="margin-top: 20px;">Summary (${meta.summary_chars} chars)</h3>
+                            <pre>${escapeHtml(data.summary)}</pre>
+                            
+                            <div class="metrics">
+                                <div class="metric">
+                                    <div class="metric-label">Reduction</div>
+                                    <div class="metric-value">${meta.reduction_percent.toFixed(1)}%</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-label">Credits Saved</div>
+                                    <div class="metric-value">${data.credits_saved}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="status error">✗ Error: ${data.error}</div>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="status error">✗ Error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        async function healthCheck() {
+            const btn = document.getElementById('health-btn');
+            const resultDiv = document.getElementById('health-result');
+            
+            btn.disabled = true;
+            resultDiv.innerHTML = '<div class="status pending"><span class="spinner"></span> Checking health...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="status success">✓ System Healthy</div>
+                    <div class="result">
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="status error">✗ Error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        function copyChatResult() {
+            const fullText = document.querySelector('#chat-result pre')?.textContent || '';
+            navigator.clipboard.writeText(fullText).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initial health check
+        window.addEventListener('load', healthCheck);
+    </script>
+</body>
+</html>
