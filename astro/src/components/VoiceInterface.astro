@@ -78,36 +78,53 @@ interface ChatResponse {
   </div>
 </div>
 
-<script>
+<script is:inline>
+  console.log('VoiceInterface script loaded');
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognition: SpeechRecognition | null = null;
-  const API_URL = window.location.hostname === 'localhost' ? 'http://127.0.0.1:5000' : 'https://voice.agentsoul.dev';
+  let recognition = null;
+  const API_URL = window.location.hostname === 'localhost' ? 'http://127.0.0.1:5001' : 'https://voice.agentsoul.dev';
+  
+  console.log('API_URL:', API_URL);
+  console.log('SpeechRecognition available:', !!SpeechRecognition);
   
   // Initialize on page load
   document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOMContentLoaded fired');
     await initializeCapabilities();
     setupEventListeners();
   });
 
   async function initializeCapabilities() {
+    console.log('Initializing capabilities...');
     // Check Speech API
     if (SpeechRecognition) {
-      document.getElementById('connection-status')!.textContent = '✅ Ready';
+      const connStatus = document.getElementById('connection-status');
+      if (connStatus) connStatus.textContent = '✅ Ready';
       recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = true;
+      recognition.onstart = () => console.log('Recognition started event');
+      recognition.onend = () => console.log('Recognition ended event');
+      recognition.onerror = (err) => console.error('Recognition error:', err.error);
       recognition.onresult = handleSpeechResult;
+      console.log('Speech recognition ready');
+      console.log('onresult handler:', recognition.onresult);
     } else {
-      document.getElementById('connection-status')!.textContent = '❌ Not supported';
+      const connStatus = document.getElementById('connection-status');
+      if (connStatus) connStatus.textContent = '❌ Not supported';
     }
 
     // Check microphone
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(track => track.stop());
-      document.getElementById('mic-status')!.textContent = '✅ Available';
-    } catch {
-      document.getElementById('mic-status')!.textContent = '❌ Denied';
+      const micStatus = document.getElementById('mic-status');
+      if (micStatus) micStatus.textContent = '✅ Available';
+      console.log('Microphone available');
+    } catch (err) {
+      const micStatus = document.getElementById('mic-status');
+      if (micStatus) micStatus.textContent = '❌ Denied';
+      console.log('Microphone error:', err);
     }
 
     // Check backend
@@ -115,49 +132,73 @@ interface ChatResponse {
       const resp = await fetch(`${API_URL}/health`);
       if (resp.ok) {
         const data = await resp.json();
+        console.log('Backend health:', data);
         if (data.tts_ready) {
-          document.getElementById('connection-status')!.textContent = '✅ Connected (TTS Ready)';
+          const connStatus = document.getElementById('connection-status');
+          if (connStatus) connStatus.textContent = '✅ Connected (TTS Ready)';
         }
       }
     } catch (err) {
-      document.getElementById('connection-status')!.textContent = '❌ Backend offline';
+      const connStatus = document.getElementById('connection-status');
+      if (connStatus) connStatus.textContent = '❌ Backend offline';
+      console.log('Backend error:', err);
     }
   }
 
   function setupEventListeners() {
-    document.getElementById('start-btn')!.addEventListener('click', startListening);
-    document.getElementById('stop-btn')!.addEventListener('click', stopListening);
+    console.log('Setting up event listeners...');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    
+    if (startBtn) {
+      startBtn.addEventListener('click', startListening);
+      console.log('Start button listener added');
+    }
+    if (stopBtn) {
+      stopBtn.addEventListener('click', stopListening);
+      console.log('Stop button listener added');
+    }
   }
 
   function startListening() {
+    console.log('startListening called');
     if (!recognition) {
       alert('Speech Recognition not supported');
       return;
     }
 
-    document.getElementById('transcription')!.textContent = '(Listening...)';
-    document.getElementById('start-btn')!.disabled = true;
-    document.getElementById('stop-btn')!.disabled = false;
+    const transcription = document.getElementById('transcription');
+    if (transcription) transcription.textContent = '(Listening...)';
+    
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    if (startBtn) startBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = false;
 
     recognition.start();
+    console.log('Recognition started');
   }
 
   function stopListening() {
+    console.log('stopListening called');
     if (recognition) {
       recognition.stop();
     }
-    document.getElementById('start-btn')!.disabled = false;
-    document.getElementById('stop-btn')!.disabled = true;
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
   }
 
-  function handleSpeechResult(event: SpeechRecognitionEvent) {
+  function handleSpeechResult(event) {
+    console.log('Speech result:', event);
     let interimTranscript = '';
     
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript;
+      console.log('Transcript chunk:', transcript, 'isFinal:', event.results[i].isFinal);
       
       if (event.results[i].isFinal) {
-        // Send final transcript to Archer
         sendToArcher(transcript);
       } else {
         interimTranscript += transcript;
@@ -165,54 +206,68 @@ interface ChatResponse {
     }
     
     if (interimTranscript) {
-      document.getElementById('transcription')!.textContent = interimTranscript;
+      const transcription = document.getElementById('transcription');
+      if (transcription) transcription.textContent = interimTranscript;
     }
   }
 
-  async function sendToArcher(text: string) {
-    document.getElementById('transcription')!.textContent = text;
+  async function sendToArcher(text) {
+    console.log('Sending to Archer:', text);
+    const transcription = document.getElementById('transcription');
+    if (transcription) transcription.textContent = text;
     
     try {
-      // Get response from Archer
       const resp = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
       });
 
-      if (!resp.ok) throw new Error('Chat failed');
+      if (!resp.ok) throw new Error('Chat failed: ' + resp.status);
       
-      const data: ChatResponse = await resp.json();
+      const data = await resp.json();
+      console.log('Chat response:', data);
       
-      // Display response metadata
       displayResponse(data);
-      
-      // Get audio
       await playAudio(data.summary_for_tts);
       
     } catch (err) {
-      document.getElementById('response-text')!.textContent = `Error: ${err}`;
+      console.error('Error:', err);
+      const responseText = document.getElementById('response-text');
+      if (responseText) responseText.textContent = `Error: ${err}`;
     }
   }
 
-  function displayResponse(data: ChatResponse) {
-    const display = document.getElementById('response-display')!;
-    display.style.display = 'block';
+  function displayResponse(data) {
+    console.log('Displaying response');
+    const display = document.getElementById('response-display');
+    if (display) display.style.display = 'block';
     
-    document.getElementById('response-text')!.textContent = data.summary_for_tts;
-    document.getElementById('meta-original')!.textContent = data.metadata.original_chars.toString();
-    document.getElementById('meta-summary')!.textContent = data.metadata.summary_chars.toString();
-    document.getElementById('meta-reduction')!.textContent = data.metadata.reduction_percent.toString();
-    document.getElementById('meta-credits')!.textContent = 
+    const responseText = document.getElementById('response-text');
+    if (responseText) responseText.textContent = data.summary_for_tts;
+    
+    const metaOriginal = document.getElementById('meta-original');
+    if (metaOriginal) metaOriginal.textContent = data.metadata.original_chars.toString();
+    
+    const metaSummary = document.getElementById('meta-summary');
+    if (metaSummary) metaSummary.textContent = data.metadata.summary_chars.toString();
+    
+    const metaReduction = document.getElementById('meta-reduction');
+    if (metaReduction) metaReduction.textContent = data.metadata.reduction_percent.toString();
+    
+    const metaCredits = document.getElementById('meta-credits');
+    if (metaCredits) metaCredits.textContent = 
       `${data.metadata.credits_original} → ${data.metadata.credits_summary}`;
     
-    // Update total credits used
-    const current = parseInt(document.getElementById('credits-used')!.textContent || '0');
-    document.getElementById('credits-used')!.textContent = 
-      (current + data.metadata.credits_summary).toString();
+    const creditsUsed = document.getElementById('credits-used');
+    if (creditsUsed) {
+      const current = parseInt(creditsUsed.textContent || '0');
+      creditsUsed.textContent = (current + data.metadata.credits_summary).toString();
+    }
   }
 
-  async function playAudio(text: string) {
+  async function playAudio(text) {
+    console.log('Playing audio for:', text);
     try {
       const ttsResp = await fetch(`${API_URL}/tts`, {
         method: 'POST',
@@ -220,14 +275,16 @@ interface ChatResponse {
         body: JSON.stringify({ text })
       });
 
-      if (!ttsResp.ok) throw new Error('TTS failed');
+      if (!ttsResp.ok) throw new Error('TTS failed: ' + ttsResp.status);
       
       const audioBlob = await ttsResp.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      const audioElement = document.getElementById('response-audio') as HTMLAudioElement;
-      audioElement.src = audioUrl;
-      audioElement.play();
+      const audioElement = document.getElementById('response-audio');
+      if (audioElement) {
+        audioElement.src = audioUrl;
+        audioElement.play();
+      }
       
     } catch (err) {
       console.error('Audio playback error:', err);

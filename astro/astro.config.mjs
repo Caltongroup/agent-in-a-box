@@ -7,15 +7,17 @@ export default defineConfig({
   // Configure dev server to listen on all interfaces
   server: {
     port: 3000,
-    host: '0.0.0.0'  // Listen on all interfaces, not just localhost
+    host: '0.0.0.0',  // Listen on all interfaces, not just localhost
+    allowedHosts: ['voice.agentsoul.dev', 'localhost', '127.0.0.1']
   },
   
   // Allow CORS for Flask backend
   vite: {
     server: {
+      allowedHosts: ['voice.agentsoul.dev', 'localhost', '127.0.0.1'],
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:5000',
+          target: 'http://127.0.0.1:5001',
           changeOrigin: true
         }
       }

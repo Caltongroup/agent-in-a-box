@@ -1,0 +1,315 @@
+---
+// AudioPipelineTestPage.astro
+// Simple test page to verify Phase 1.1 components
+
+import { runAudioPipelineTest } from '../lib/AudioPipelineTest';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Audio Pipeline Test - Phase 1.1</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #0f1419;
+        color: #e0e0e0;
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+        border-bottom: 2px solid #4a9eff;
+        padding-bottom: 20px;
+      }
+
+      h1 {
+        color: #4a9eff;
+        margin: 0 0 10px 0;
+      }
+
+      .subtitle {
+        color: #999;
+        font-size: 14px;
+      }
+
+      .console {
+        background: #1a1f2e;
+        border: 1px solid #4a9eff;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 20px 0;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 12px;
+        height: 600px;
+        overflow-y: auto;
+        line-height: 1.5;
+      }
+
+      .console-line {
+        margin: 2px 0;
+      }
+
+      .info { color: #4a9eff; }
+      .success { color: #4caf50; }
+      .error { color: #f44336; }
+      .warning { color: #ff9800; }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        margin: 20px 0;
+        flex-wrap: wrap;
+      }
+
+      button {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      .btn-primary {
+        background: #4a9eff;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: #357abd;
+        transform: translateY(-2px);
+      }
+
+      .btn-secondary {
+        background: #555;
+        color: white;
+      }
+
+      .btn-secondary:hover {
+        background: #666;
+      }
+
+      .status {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+        margin: 20px 0;
+      }
+
+      .status-card {
+        background: #1a1f2e;
+        border: 1px solid #4a9eff;
+        border-radius: 6px;
+        padding: 15px;
+      }
+
+      .status-card h3 {
+        margin: 0 0 10px 0;
+        color: #4a9eff;
+        font-size: 14px;
+      }
+
+      .status-card p {
+        margin: 5px 0;
+        font-size: 12px;
+        color: #999;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-top: 5px;
+      }
+
+      .badge.active {
+        background: #4caf50;
+        color: white;
+      }
+
+      .badge.inactive {
+        background: #666;
+        color: #ccc;
+      }
+
+      .instructions {
+        background: #1a1f2e;
+        border-left: 4px solid #4a9eff;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+
+      .instructions h3 {
+        margin-top: 0;
+        color: #4a9eff;
+      }
+
+      .instructions ol {
+        margin: 10px 0;
+        padding-left: 20px;
+      }
+
+      .instructions li {
+        margin: 5px 0;
+        font-size: 13px;
+      }
+
+      code {
+        background: #0f1419;
+        padding: 2px 6px;
+        border-radius: 3px;
+        color: #4caf50;
+        font-size: 11px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="header">
+      <h1>🎤 Audio Pipeline Test</h1>
+      <p class="subtitle">Phase 1.1: Audio Pipeline + Wake Word Detection</p>
+    </div>
+
+    <div class="instructions">
+      <h3>📋 Instructions</h3>
+      <ol>
+        <li>Click <strong>"Start Test"</strong> to begin</li>
+        <li>Allow microphone access when prompted</li>
+        <li>Watch the console for detection events</li>
+        <li>Speak to trigger audio/silence detection</li>
+        <li>Say <strong>"Hey Archer"</strong> or <strong>"Go for Archer"</strong> to test wake words</li>
+        <li>Check component states in the status cards</li>
+        <li>Click <strong>"Stop Test"</strong> to finish</li>
+      </ol>
+    </div>
+
+    <div class="controls">
+      <button class="btn-primary" id="startBtn">▶️ Start Test</button>
+      <button class="btn-secondary" id="stopBtn" disabled>⏹️ Stop Test</button>
+      <button class="btn-secondary" id="stateBtn" disabled>📊 Print State</button>
+      <button class="btn-secondary" id="clearBtn">🗑️ Clear Console</button>
+    </div>
+
+    <div class="status" id="status">
+      <div class="status-card">
+        <h3>AudioPipeline</h3>
+        <p>Status: <span id="ap-status">Not initialized</span></p>
+        <p>Processing: <span id="ap-processing">Stopped</span></p>
+        <div id="ap-badge" class="badge inactive">Inactive</div>
+      </div>
+
+      <div class="status-card">
+        <h3>WakeWordDetector</h3>
+        <p>Model: <span id="wwd-model">Not loaded</span></p>
+        <p>Hey Archer: <span id="wwd-ha-threshold">70%</span></p>
+        <p>Go for Archer: <span id="wwd-gfa-threshold">60%</span></p>
+        <div id="wwd-badge" class="badge inactive">Inactive</div>
+      </div>
+
+      <div class="status-card">
+        <h3>SilenceDetector</h3>
+        <p>Threshold: <span id="sd-threshold">2%</span></p>
+        <p>Silence Duration: <span id="sd-duration">2500ms</span></p>
+        <p>State: <span id="sd-state">Listening</span></p>
+        <div id="sd-badge" class="badge inactive">Inactive</div>
+      </div>
+    </div>
+
+    <h3>📺 Console Output</h3>
+    <div class="console" id="console"></div>
+
+    <script>
+      let testInstance = null;
+      const consoleDiv = document.getElementById('console');
+      const originalLog = console.log;
+      const originalError = console.error;
+      const originalWarn = console.warn;
+      const originalClear = console.clear;
+
+      // Intercept console messages
+      function logToConsole(type, ...args) {
+        const line = document.createElement('div');
+        line.className = `console-line ${type}`;
+        line.textContent = args.map(arg => {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg, null, 2);
+            } catch {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ');
+        
+        consoleDiv.appendChild(line);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+      }
+
+      console.log = function(...args) {
+        originalLog(...args);
+        const type = args[0]?.includes('✓') ? 'success' : 
+                     args[0]?.includes('❌') ? 'error' :
+                     args[0]?.includes('🎤') ? 'success' :
+                     args[0]?.includes('❌') ? 'error' :
+                     'info';
+        logToConsole(type, ...args);
+      };
+
+      console.error = function(...args) {
+        originalError(...args);
+        logToConsole('error', ...args);
+      };
+
+      console.warn = function(...args) {
+        originalWarn(...args);
+        logToConsole('warning', ...args);
+      };
+
+      console.clear = function() {
+        originalClear();
+        consoleDiv.innerHTML = '';
+      };
+
+      // Button handlers
+      document.getElementById('startBtn').addEventListener('click', async () => {
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        document.getElementById('stateBtn').disabled = false;
+
+        const { runAudioPipelineTest } = await import('../lib/AudioPipelineTest');
+        await runAudioPipelineTest();
+        
+        testInstance = window.audioTest;
+      });
+
+      document.getElementById('stopBtn').addEventListener('click', () => {
+        if (testInstance?.stop) {
+          testInstance.stop();
+        }
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').disabled = true;
+        document.getElementById('stateBtn').disabled = true;
+      });
+
+      document.getElementById('stateBtn').addEventListener('click', () => {
+        if (testInstance?.printState) {
+          testInstance.printState();
+        }
+      });
+
+      document.getElementById('clearBtn').addEventListener('click', () => {
+        console.clear();
+      });
+    </script>
+  </body>
+</html>

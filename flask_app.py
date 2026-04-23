@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Flask backend for voice interface MVP - WIRED VERSION
-Connects to Hermes gateway for real LLM responses and ElevenLabs for TTS
+Serves Astro static files + API endpoints
 """
 
-from flask import Flask, jsonify, request, send_file, make_response
+from flask import Flask, jsonify, request, send_file, send_from_directory, make_response
 from summarize import summarize_for_tts, estimate_tts_credits
 import os
 import io
@@ -12,7 +12,8 @@ import subprocess
 import json
 import re
 
-app = Flask(__name__)
+# Serve static files from Astro build output
+app = Flask(__name__, static_folder='static', static_url_path='')
 
 # Check if ElevenLabs key is available
 ELEVENLABS_API_KEY = None
@@ -36,6 +37,15 @@ except Exception as e:
 
 ELEVENLABS_READY = bool(ELEVENLABS_API_KEY)
 
+# Serve static Astro frontend FIRST (before any middleware interferes)
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_spa(path):
+    """Serve Astro static files with SPA fallback to index.html"""
+    if path and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, 'index.html')
+
 # CORS middleware
 @app.after_request
 def add_cors_headers(response):
@@ -52,6 +62,10 @@ def handle_preflight():
         response.headers.add("Access-Control-Allow-Headers", "Content-Type")
         response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         return response
+    # Allow all other requests (GET, POST) to continue
+    # Explicitly allow SPA routes
+    if request.path in ['/', '/index.html'] or not request.path.startswith('/api') and not '.' in request.path.split('/')[-1]:
+        return None  # Let SPA handler process it
 
 @app.route('/health', methods=['GET', 'OPTIONS'])
 def health():
@@ -246,9 +260,7 @@ if __name__ == '__main__':
     print("🎤 Flask Voice API starting...")
     print(f"   Summarization: ✅ Ready")
     print(f"   TTS endpoint: {'✅ Live (ElevenLabs)' if ELEVENLABS_READY else '⚠️ Mock (testing)'}")
-    print(f"   Chat endpoint: ✅ Wired to Hermes gateway")
+    print(f"   Chat endpoint: ✅ Ready")
+    print(f"   Static files: ✅ Serving Astro frontend")
     print(f"   Browser CORS: ✅ Enabled")
-    print(f"\n   Listen: http://127.0.0.1:5000")
-    print(f"   Hermes gateway: http://127.0.0.1:7000")
-    print(f"   Ollama: http://127.0.0.1:11434")
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5001, debug=False)
