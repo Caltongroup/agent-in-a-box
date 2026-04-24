@@ -4,7 +4,8 @@
 </button> <button id="stop-btn" class="secondary-btn" disabled>
 ⏹️ Stop Recording
 </button> </div> <div class="transcription-display"> <div class="label">Your Question:</div> <div id="transcription" class="text-box">(Listening...)</div> </div> <div class="response-display" id="response-display" style="display: none;"> <div class="label">Archer's Response (Speaking):</div> <div id="response-text" class="text-box"></div> <div class="metadata"> <span>📊 Full: <span id="meta-original">-</span> chars</span> <span>📉 Summary: <span id="meta-summary">-</span> chars (<span id="meta-reduction">-</span>%)</span> <span>💰 Credits: <span id="meta-credits">-</span></span> </div> <audio id="response-audio" controls></audio> </div> <div class="info-panel"> <h3>ℹ️ How it works</h3> <ul> <li>Click "Start Recording" and speak your question</li> <li>Your speech is transcribed using Web Speech API</li> <li>Archer generates a response via orchestrator</li> <li>Response is summarized (60-75% reduction)</li> <li>Summary is converted to speech (ElevenLabs)</li> <li>Audio plays back through your device</li> <li>💰 Credits saved by summarization</li> </ul> </div> </div> <script type="module">
-  import { VoiceStateMachine } from '../lib/VoiceStateMachine.ts';
+  import { VoiceStateMachineWithDiagnostics } from '../lib/VoiceStateMachineWithDiagnostics.ts';
+  import { DiagnosticLogger } from '../lib/DiagnosticLogger.ts';
   import { AndroidMicrophoneHelper } from '../lib/AndroidMicrophoneHelper.ts';
   
   console.log('VoiceInterface script loaded');
@@ -31,8 +32,9 @@
     const diag = await AndroidMicrophoneHelper.getDiagnostics();
     console.log('Microphone Diagnostics:', diag);
     
-    // Initialize state machine with wake phrase detection
-    stateMachine = new VoiceStateMachine({ enableLogging: true });
+    // Initialize state machine with diagnostics
+    const diagnosticLogger = new DiagnosticLogger();
+    stateMachine = new VoiceStateMachineWithDiagnostics(diagnosticLogger);
     const smOk = await stateMachine.initialize();
     
     if (!smOk) {

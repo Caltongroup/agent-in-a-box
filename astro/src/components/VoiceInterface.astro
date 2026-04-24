@@ -79,7 +79,8 @@ interface ChatResponse {
 </div>
 
 <script is:inline type="module">
-  import { VoiceStateMachine } from '../lib/VoiceStateMachine.ts';
+  import { VoiceStateMachineWithDiagnostics } from '../lib/VoiceStateMachineWithDiagnostics.ts';
+  import { DiagnosticLogger } from '../lib/DiagnosticLogger.ts';
   import { AndroidMicrophoneHelper } from '../lib/AndroidMicrophoneHelper.ts';
   
   console.log('VoiceInterface script loaded');
@@ -106,8 +107,9 @@ interface ChatResponse {
     const diag = await AndroidMicrophoneHelper.getDiagnostics();
     console.log('Microphone Diagnostics:', diag);
     
-    // Initialize state machine with wake phrase detection
-    stateMachine = new VoiceStateMachine({ enableLogging: true });
+    // Initialize state machine with diagnostics
+    const diagnosticLogger = new DiagnosticLogger();
+    stateMachine = new VoiceStateMachineWithDiagnostics(diagnosticLogger);
     const smOk = await stateMachine.initialize();
     
     if (!smOk) {
