@@ -78,10 +78,14 @@ interface ChatResponse {
   </div>
 </div>
 
-<script is:inline>
+<script is:inline type="module">
+  import { VoiceStateMachine } from '../lib/VoiceStateMachine.ts';
+  
   console.log('VoiceInterface script loaded');
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
+  let stateMachine = null;
+  
   const API_URL = window.location.hostname === 'localhost' ? 'http://127.0.0.1:5001' : 'https://voice.agentsoul.dev';
   
   console.log('API_URL:', API_URL);
@@ -96,376 +100,235 @@ interface ChatResponse {
 
   async function initializeCapabilities() {
     console.log('Initializing capabilities...');
-    // Check Speech API
-    if (SpeechRecognition) {
-      const connStatus = document.getElementById('connection-status');
-      if (connStatus) connStatus.textContent = '✅ Ready';
-      recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.onstart = () => console.log('Recognition started event');
-      recognition.onend = () => console.log('Recognition ended event');
-      recognition.onerror = (err) => console.error('Recognition error:', err.error);
-      recognition.onresult = handleSpeechResult;
-      console.log('Speech recognition ready');
-      console.log('onresult handler:', recognition.onresult);
-    } else {
-      const connStatus = document.getElementById('connection-status');
-      if (connStatus) connStatus.textContent = '❌ Not supported';
+    
+    // Initialize state machine with wake phrase detection
+    stateMachine = new VoiceStateMachine({ enableLogging: true });
+    const smOk = await stateMachine.initialize();
+    
+    if (!smOk) {
+      console.error('VoiceStateMachine initialization failed');
+      updateStatus('connection', '❌ Failed to initialize');
+      return;
     }
+    
+    // Set up state machine callbacks
+    stateMachine.onStateChangeCallback((newState, oldState) => {
+      console.log(`State: ${oldState} → ${newState}`);
+      updateUIForState(newState);
+    });
 
-    // Check microphone
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
-      const micStatus = document.getElementById('mic-status');
-      if (micStatus) micStatus.textContent = '✅ Available';
-      console.log('Microphone available');
-    } catch (err) {
-      const micStatus = document.getElementById('mic-status');
-      if (micStatus) micStatus.textContent = '❌ Denied';
-      console.log('Microphone error:', err);
-    }
+    stateMachine.onWakeDetectedCallback(() => {
+      console.log('🎤 Wake phrase detected!');
+      document.getElementById('transcription').textContent = '(Recording... say your question)';
+      document.getElementById('transcription').style.color = '#4caf50';
+    });
 
-    // Check backend
-    try {
-      const resp = await fetch(`${API_URL}/health`);
-      if (resp.ok) {
-        const data = await resp.json();
-        console.log('Backend health:', data);
-        if (data.tts_ready) {
-          const connStatus = document.getElementById('connection-status');
-          if (connStatus) connStatus.textContent = '✅ Connected (TTS Ready)';
-        }
+    stateMachine.onRecordingStartCallback(() => {
+      console.log('Recording started');
+      document.getElementById('start-btn').disabled = true;
+      document.getElementById('stop-btn').disabled = false;
+    });
+
+    stateMachine.onRecordingEndCallback(async (text) => {
+      console.log('Recording ended:', text);
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('stop-btn').disabled = true;
+      
+      if (text.trim()) {
+        // Send to Archer
+        await sendToArcher(text);
       }
-    } catch (err) {
-      const connStatus = document.getElementById('connection-status');
-      if (connStatus) connStatus.textContent = '❌ Backend offline';
-      console.log('Backend error:', err);
+    });
+
+    stateMachine.onTranscriptCallback((text, isFinal) => {
+      document.getElementById('transcription').textContent = text || '(Listening...)';
+      stateMachine.updateTranscript(text, isFinal);
+    });
+
+    // Set up Web Speech API
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        const displayText = finalTranscript || interimTranscript;
+        if (displayText) {
+          stateMachine.updateTranscript(displayText, !!finalTranscript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+      };
+
+      recognition.onend = () => {
+        console.log('Recognition ended');
+      };
     }
+
+    // Check backend health
+    try {
+      const response = await fetch(`${API_URL}/health`);
+      if (response.ok) {
+        const data = await response.json();
+        updateStatus('connection', '✅ Connected');
+        console.log('Backend health:', data);
+      }
+    } catch (error) {
+      console.error('Backend check failed:', error);
+      updateStatus('connection', '❌ Connection failed');
+    }
+
+    updateStatus('mic', '✅ Available');
   }
 
   function setupEventListeners() {
     console.log('Setting up event listeners...');
+    
     const startBtn = document.getElementById('start-btn');
     const stopBtn = document.getElementById('stop-btn');
-    
+
     if (startBtn) {
-      startBtn.addEventListener('click', startListening);
+      startBtn.addEventListener('click', () => {
+        console.log('Start button clicked');
+        // Manually trigger wake detection for testing
+        // In production, this is automatic via AudioPipeline + WakeWordDetector
+        startManualRecording();
+      });
       console.log('Start button listener added');
     }
+
     if (stopBtn) {
-      stopBtn.addEventListener('click', stopListening);
+      stopBtn.addEventListener('click', () => {
+        console.log('Stop button clicked');
+        stopManualRecording();
+      });
       console.log('Stop button listener added');
     }
   }
 
-  function startListening() {
-    console.log('startListening called');
-    if (!recognition) {
-      alert('Speech Recognition not supported');
-      return;
+  function startManualRecording() {
+    console.log('Manual recording started');
+    if (recognition) {
+      recognition.start();
     }
-
-    const transcription = document.getElementById('transcription');
-    if (transcription) transcription.textContent = '(Listening...)';
-    
-    const startBtn = document.getElementById('start-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    if (startBtn) startBtn.disabled = true;
-    if (stopBtn) stopBtn.disabled = false;
-
-    recognition.start();
-    console.log('Recognition started');
   }
 
-  function stopListening() {
-    console.log('stopListening called');
+  function stopManualRecording() {
+    console.log('Manual recording stopped');
     if (recognition) {
       recognition.stop();
     }
-    const startBtn = document.getElementById('start-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    if (startBtn) startBtn.disabled = false;
-    if (stopBtn) stopBtn.disabled = true;
   }
 
-  function handleSpeechResult(event) {
-    console.log('Speech result:', event);
-    let interimTranscript = '';
-    
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      console.log('Transcript chunk:', transcript, 'isFinal:', event.results[i].isFinal);
-      
-      if (event.results[i].isFinal) {
-        sendToArcher(transcript);
-      } else {
-        interimTranscript += transcript;
-      }
-    }
-    
-    if (interimTranscript) {
-      const transcription = document.getElementById('transcription');
-      if (transcription) transcription.textContent = interimTranscript;
+  function updateUIForState(state) {
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+
+    switch (state) {
+      case 'LISTENING':
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        document.getElementById('transcription').textContent = '(Say "Hey Archer" to start, or click Start)';
+        document.getElementById('transcription').style.color = '#999';
+        break;
+      case 'RECORDING':
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        document.getElementById('transcription').textContent = '(Recording... say your question, end with "Go for Archer")';
+        document.getElementById('transcription').style.color = '#4caf50';
+        break;
+      case 'PROCESSING':
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
+        document.getElementById('transcription').textContent = '(Processing...)';
+        document.getElementById('transcription').style.color = '#ff9800';
+        break;
+      case 'TTS_PLAYBACK':
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
+        document.getElementById('transcription').textContent = '(Playing response...)';
+        document.getElementById('transcription').style.color = '#4a9eff';
+        break;
     }
   }
 
   async function sendToArcher(text) {
     console.log('Sending to Archer:', text);
-    const transcription = document.getElementById('transcription');
-    if (transcription) transcription.textContent = text;
-    
+
     try {
-      const resp = await fetch(`${API_URL}/chat`, {
+      const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ message: text })
       });
 
-      if (!resp.ok) throw new Error('Chat failed: ' + resp.status);
-      
-      const data = await resp.json();
+      if (!response.ok) {
+        throw new Error(`Chat failed: ${response.status}`);
+      }
+
+      const data = await response.json();
       console.log('Chat response:', data);
+
+      // Process response
+      await stateMachine.processChatResponse(data);
       
+      // Display and play response
       displayResponse(data);
-      await playAudio(data.summary_for_tts);
       
-    } catch (err) {
-      console.error('Error:', err);
-      const responseText = document.getElementById('response-text');
-      if (responseText) responseText.textContent = `Error: ${err}`;
+      // After TTS plays, return to listening
+      setTimeout(() => {
+        stateMachine.returnToListening();
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error:', error);
+      updateStatus('connection', '❌ Chat failed');
     }
   }
 
   function displayResponse(data) {
-    console.log('Displaying response');
-    const display = document.getElementById('response-display');
-    if (display) display.style.display = 'block';
-    
+    const responseDisplay = document.getElementById('response-display');
     const responseText = document.getElementById('response-text');
-    if (responseText) responseText.textContent = data.summary_for_tts;
-    
-    const metaOriginal = document.getElementById('meta-original');
-    if (metaOriginal) metaOriginal.textContent = data.metadata.original_chars.toString();
-    
-    const metaSummary = document.getElementById('meta-summary');
-    if (metaSummary) metaSummary.textContent = data.metadata.summary_chars.toString();
-    
-    const metaReduction = document.getElementById('meta-reduction');
-    if (metaReduction) metaReduction.textContent = data.metadata.reduction_percent.toString();
-    
-    const metaCredits = document.getElementById('meta-credits');
-    if (metaCredits) metaCredits.textContent = 
-      `${data.metadata.credits_original} → ${data.metadata.credits_summary}`;
-    
-    const creditsUsed = document.getElementById('credits-used');
-    if (creditsUsed) {
-      const current = parseInt(creditsUsed.textContent || '0');
-      creditsUsed.textContent = (current + data.metadata.credits_summary).toString();
+
+    responseText.textContent = data.summary_for_tts || data.full;
+    responseDisplay.style.display = 'block';
+
+    // Update metadata
+    if (data.metadata) {
+      document.getElementById('meta-original').textContent = data.metadata.original_chars;
+      document.getElementById('meta-summary').textContent = data.metadata.summary_chars;
+      document.getElementById('meta-reduction').textContent = data.metadata.reduction_percent;
+      document.getElementById('meta-credits').textContent = (data.metadata.credits_original - data.metadata.credits_summary).toFixed(2);
+      updateCreditsUsed(data.metadata.credits_summary);
     }
   }
 
-  async function playAudio(text) {
-    console.log('Playing audio for:', text);
-    try {
-      const ttsResp = await fetch(`${API_URL}/tts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+  function updateStatus(field, value) {
+    const element = document.getElementById(`${field}-status`);
+    if (element) {
+      element.textContent = value;
+    }
+  }
 
-      if (!ttsResp.ok) throw new Error('TTS failed: ' + ttsResp.status);
-      
-      const audioBlob = await ttsResp.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      
-      const audioElement = document.getElementById('response-audio');
-      if (audioElement) {
-        audioElement.src = audioUrl;
-        audioElement.play();
-      }
-      
-    } catch (err) {
-      console.error('Audio playback error:', err);
+  function updateCreditsUsed(credits) {
+    const element = document.getElementById('credits-used');
+    if (element) {
+      element.textContent = credits.toFixed(2);
     }
   }
 </script>
-
-<style>
-  .voice-interface {
-    max-width: 700px;
-    margin: 0 auto;
-    padding: 40px 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  }
-
-  .header {
-    text-align: center;
-    margin-bottom: 40px;
-  }
-
-  .header h1 {
-    font-size: 32px;
-    color: #00d9ff;
-    margin-bottom: 10px;
-  }
-
-  .subtitle {
-    color: #aaa;
-    font-size: 14px;
-  }
-
-  .status-panel {
-    background: rgba(0, 217, 255, 0.05);
-    border: 1px solid #00d9ff;
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: space-around;
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-
-  .status-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .status-item .label {
-    color: #00d9ff;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .status-item .value {
-    color: #fff;
-    font-size: 14px;
-  }
-
-  .controls {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 30px;
-  }
-
-  .primary-btn,
-  .secondary-btn {
-    flex: 1;
-    padding: 16px;
-    font-size: 16px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-  }
-
-  .primary-btn {
-    background: #00d9ff;
-    color: #000;
-  }
-
-  .primary-btn:hover:not(:disabled) {
-    background: #00ffff;
-    transform: scale(1.02);
-  }
-
-  .primary-btn:disabled {
-    opacity: 0.5;
-  }
-
-  .secondary-btn {
-    background: #ff0055;
-    color: #fff;
-  }
-
-  .secondary-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .transcription-display,
-  .response-display {
-    margin-bottom: 24px;
-  }
-
-  .label {
-    color: #00d9ff;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-
-  .text-box {
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid #00d9ff;
-    border-radius: 8px;
-    padding: 16px;
-    min-height: 60px;
-    color: #fff;
-    font-family: monospace;
-    font-size: 14px;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .metadata {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(0, 217, 255, 0.2);
-    color: #aaa;
-    font-size: 12px;
-    font-family: monospace;
-  }
-
-  audio {
-    width: 100%;
-    margin-top: 12px;
-  }
-
-  .info-panel {
-    background: rgba(0, 217, 255, 0.05);
-    border: 1px solid #00d9ff;
-    border-radius: 8px;
-    padding: 20px;
-    margin-top: 40px;
-  }
-
-  .info-panel h3 {
-    color: #00d9ff;
-    margin-bottom: 12px;
-    font-size: 16px;
-  }
-
-  .info-panel ul {
-    list-style: none;
-    padding: 0;
-  }
-
-  .info-panel li {
-    color: #aaa;
-    font-size: 14px;
-    margin-bottom: 8px;
-  }
-
-  @media (max-width: 600px) {
-    .header h1 {
-      font-size: 24px;
-    }
-
-    .status-panel {
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .controls {
-      flex-direction: column;
-    }
-  }
-</style>

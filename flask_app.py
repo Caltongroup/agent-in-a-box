@@ -13,7 +13,9 @@ import json
 import re
 
 # Serve static files from Astro build output
-app = Flask(__name__, static_folder='static', static_url_path='')
+# Set static_url_path=None to disable automatic Flask static routing
+# We handle all routing manually with the SPA catch-all below
+app = Flask(__name__, static_folder='static', static_url_path=None)
 
 # Check if ElevenLabs key is available
 ELEVENLABS_API_KEY = None
@@ -42,9 +44,24 @@ ELEVENLABS_READY = bool(ELEVENLABS_API_KEY)
 @app.route('/<path:path>')
 def serve_spa(path):
     """Serve Astro static files with SPA fallback to index.html"""
-    if path and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    return send_from_directory(app.static_folder, 'index.html')
+    try:
+        # Normalize path: remove trailing slashes
+        path_normalized = path.rstrip('/')
+        
+        if path_normalized:
+            full_path = os.path.join(app.static_folder, path_normalized)
+            # If it's a directory, serve index.html from it
+            if os.path.isdir(full_path):
+                target_file = os.path.join(path_normalized, 'index.html')
+                return send_from_directory(app.static_folder, target_file)
+            # If it's a file, serve it
+            if os.path.isfile(full_path):
+                return send_from_directory(app.static_folder, path_normalized)
+        # Default to root index.html for SPA routing
+        return send_from_directory(app.static_folder, 'index.html')
+    except Exception as e:
+        print(f"SPA error: {e}")
+        return send_from_directory(app.static_folder, 'index.html')
 
 # CORS middleware
 @app.after_request
@@ -62,10 +79,7 @@ def handle_preflight():
         response.headers.add("Access-Control-Allow-Headers", "Content-Type")
         response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         return response
-    # Allow all other requests (GET, POST) to continue
-    # Explicitly allow SPA routes
-    if request.path in ['/', '/index.html'] or not request.path.startswith('/api') and not '.' in request.path.split('/')[-1]:
-        return None  # Let SPA handler process it
+    # For all other requests, let them through (SPA will handle routing)
 
 @app.route('/health', methods=['GET', 'OPTIONS'])
 def health():
