@@ -65,6 +65,16 @@ export class AudioPipeline {
    * Android → tries minimal constraints
    */
   private async requestMicrophoneAccess(): Promise<MediaStream | null> {
+    // Wrap in timeout to prevent hanging
+    return Promise.race([
+      this._tryMicrophoneAccess(),
+      new Promise<MediaStream | null>((_, reject) => 
+        setTimeout(() => reject(new Error('Microphone request timeout - permission may be denied')), 5000)
+      )
+    ]);
+  }
+
+  private async _tryMicrophoneAccess(): Promise<MediaStream | null> {
     // Audio constraints in order of preference (strict to lenient)
     const constraintsList = [
       // Strict: Desktop with all features
