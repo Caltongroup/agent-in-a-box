@@ -5,6 +5,7 @@
 ⏹️ Stop Recording
 </button> </div> <div class="transcription-display"> <div class="label">Your Question:</div> <div id="transcription" class="text-box">(Listening...)</div> </div> <div class="response-display" id="response-display" style="display: none;"> <div class="label">Archer's Response (Speaking):</div> <div id="response-text" class="text-box"></div> <div class="metadata"> <span>📊 Full: <span id="meta-original">-</span> chars</span> <span>📉 Summary: <span id="meta-summary">-</span> chars (<span id="meta-reduction">-</span>%)</span> <span>💰 Credits: <span id="meta-credits">-</span></span> </div> <audio id="response-audio" controls></audio> </div> <div class="info-panel"> <h3>ℹ️ How it works</h3> <ul> <li>Click "Start Recording" and speak your question</li> <li>Your speech is transcribed using Web Speech API</li> <li>Archer generates a response via orchestrator</li> <li>Response is summarized (60-75% reduction)</li> <li>Summary is converted to speech (ElevenLabs)</li> <li>Audio plays back through your device</li> <li>💰 Credits saved by summarization</li> </ul> </div> </div> <script type="module">
   import { VoiceStateMachine } from '../lib/VoiceStateMachine.ts';
+  import { AndroidMicrophoneHelper } from '../lib/AndroidMicrophoneHelper.ts';
   
   console.log('VoiceInterface script loaded');
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -26,12 +27,30 @@
   async function initializeCapabilities() {
     console.log('Initializing capabilities...');
     
+    // Show diagnostics on Android
+    const diag = await AndroidMicrophoneHelper.getDiagnostics();
+    console.log('Microphone Diagnostics:', diag);
+    
     // Initialize state machine with wake phrase detection
     stateMachine = new VoiceStateMachine({ enableLogging: true });
     const smOk = await stateMachine.initialize();
     
     if (!smOk) {
       console.error('VoiceStateMachine initialization failed');
+      
+      // Show detailed diagnostic error
+      const diagMessage = await AndroidMicrophoneHelper.getDiagnosticMessage();
+      console.log(diagMessage);
+      
+      // Show permission-specific error UI
+      const permStatus = diag.permissionStatus;
+      if (permStatus === 'denied') {
+        updateStatus('mic', '❌ Permission Denied - See settings below');
+        showPermissionFixUI();
+      } else {
+        updateStatus('mic', '❌ Microphone unavailable');
+      }
+      
       updateStatus('connection', '❌ Failed to initialize');
       return;
     }
@@ -254,6 +273,50 @@
     const element = document.getElementById('credits-used');
     if (element) {
       element.textContent = credits.toFixed(2);
+    }
+  }
+
+  async function showPermissionFixUI() {
+    const diagnosticHTML = await AndroidMicrophoneHelper.getDiagnosticHTML();
+    const fixPanel = document.createElement('div');
+    fixPanel.id = 'permission-fix-panel';
+    fixPanel.style.cssText = `
+      margin-top: 20px;
+      padding: 20px;
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 8px;
+      font-size: 14px;
+    `;
+    fixPanel.innerHTML = `
+      <h3 style="margin-top: 0; color: #856404;">🔧 Microphone Permission Fix</h3>
+      <p><strong>Your device has denied microphone access.</strong></p>
+      <h4>On Android:</h4>
+      <ol>
+        <li>Open <strong>Settings</strong></li>
+        <li>Go to <strong>Apps</strong> (or Application Manager)</li>
+        <li>Find your browser (Chrome, Firefox, etc.)</li>
+        <li>Tap <strong>Permissions</strong></li>
+        <li>Enable <strong>Microphone</strong></li>
+        <li>Return here and refresh the page</li>
+      </ol>
+      <h4>On iOS:</h4>
+      <ol>
+        <li>Open <strong>Settings</strong></li>
+        <li>Go to <strong>Privacy > Microphone</strong></li>
+        <li>Enable Safari (or your browser)</li>
+        <li>Refresh this page</li>
+      </ol>
+      <div style="margin-top: 15px; padding: 15px; background: white; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">
+        ${diagnosticHTML}
+      </div>
+    `;
+    
+    const infoPanel = document.querySelector('.info-panel');
+    if (infoPanel) {
+      infoPanel.parentNode.insertBefore(fixPanel, infoPanel);
+    } else {
+      document.querySelector('.voice-interface').appendChild(fixPanel);
     }
   }
 </script> </body></html>
