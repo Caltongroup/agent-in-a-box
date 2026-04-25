@@ -1,0 +1,125 @@
+# =============================================================================
+# .gitignore — Agent in a Box / AgentSoul repos
+# Drop this file as .gitignore in the root of any repo
+# =============================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+*.ipynb
+
+# --- Node / Astro / Vite ---
+node_modules/
+.npm
+.yarn/
+.pnp.*
+dist/
+.output/
+.cache/
+.nuxt/
+.next/
+.astro/
+*.vite/
+**/.vite/
+**/deps_temp_*/
+
+# --- Secrets & API keys (CRITICAL — never commit these) ---
+.env
+.env.*
+!.env.example
+*.env
+secrets/
+*secret*
+*api_key*
+*_credentials*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# --- Models & large binary files ---
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.pkl
+*.h5
+
+# --- ChromaDB & vector stores ---
+chroma_db/
+*.chroma
+*.parquet
+
+# --- PocketBase ---
+pb_data/
+pb_migrations/
+
+# --- macOS ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+Thumbs.db
+ehthumbs.db
+
+# --- Logs ---
+*.log
+logs/
+log/
+*.out
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cursor/
+
+# --- Compiled output ---
+*.so
+*.dylib
+*.dll
+*.class
+
+# --- Temp / scratch ---
+tmp/
+temp/
+scratch/
+*.tmp
+*.bak
+*.orig
+
+# --- llama.cpp build artifacts ---
+llama.cpp/build/
+*.o
+*.a
+CMakeCache.txt
+CMakeFiles/
