@@ -36,8 +36,8 @@ LLAMA_URL   = "http://127.0.0.1:8080"            # llama-server (direct, no Olla
 MODEL        = "qwen2.5:1.5b"
 PB_URL       = "http://127.0.0.1:8090"
 MAX_HISTORY  = 10       # rolling turns kept in memory
-NUM_CTX      = 2048     # set at llama-server startup via --ctx-size
-NUM_PREDICT  = 150       # cap response tokens
+NUM_CTX      = 4096     # set at llama-server startup via --ctx-size
+NUM_PREDICT  = 250       # cap response tokens
 
 # ── App state (module-level, single-process) ───────────────────────────────────
 app              = Flask(__name__)
@@ -63,6 +63,7 @@ def load_soul(soul_path: str) -> str:
 
 
 def hyde_rewrite(query: str) -> str:
+    return query  # HyDE disabled — causes hallucination on small models
     """Generate a hypothetical policy-doc answer and embed that instead of the raw question."""
     try:
         r = requests.post(f"{LLAMA_URL}/v1/chat/completions", json={
@@ -124,11 +125,14 @@ def rag_context(query: str) -> str:
         elif 'vision' in ql:
             _where = {'source': 'vision_summary.txt'}
             source_filter = True
+        elif 'hra' in ql or 'health reimbursement' in ql or 'reimburs' in ql:
+            _where = {'source': 'hra_summary.txt'}
+            source_filter = True
         results = _thread_local.col.query(
             query_embeddings=[emb], n_results=3,
             **(({'where': _where}) if _where else {})
         )
-        threshold = 0.65 if source_filter else 0.45
+        threshold = 0.75 if source_filter else 0.65
         pairs = zip(results.get('documents',[[]])[0], results.get('distances',[[]])[0])
         docs = [d for d,dist in pairs if dist < threshold]
         if docs:
@@ -207,15 +211,21 @@ def stream_chat(user_message: str):
         ctx = rag_context(user_message)
         if ctx:
             user_content = (
-                "If the context below does not contain enough information to answer the question, respond only with: 'I don\'t have that information — please check with HR or your manager.' Otherwise, use ONLY the following policy excerpts to answer. "
-                "State the exact number and unit from the document in your first sentence. "
-                "Never say 'may vary', 'typically', 'consult HR', or hedge in any way — the document has the answer, state it directly. "
-                "Read the question carefully. If the question asks about options or choices, list ALL of them from the context. If it asks about a specific situation, answer only that. Be concise — use bullet points for lists, 1-2 sentences for single facts.\n\n"
+                "Answer using ONLY the policy excerpts provided below. "
+                "Do NOT invent steps, portals, forms, procedures, or any information not explicitly written in the excerpts. "
+                "If the excerpts contain the answer, state it directly and concisely in 1-3 sentences. "
+                "If the excerpts do not contain enough to answer, say: I don't have that specific detail in my documents — please contact HR directly. "
+                "Never generate numbered steps or bullet points unless they appear word-for-word in the excerpts. "
+                "Never mention HR portals, certificates of coverage, or SBC documents unless they are named in the excerpts.\n\n"
                 f"---\n{ctx}\n---\n\n"
                 f"Question: {user_message}"
             )
         else:
-            user_content = user_message
+            user_content = (
+                "No relevant documents found. Do NOT generate steps or invent information. "
+                "Respond only with: I don't have that specific detail in my documents — please contact HR directly. "
+                f"Question: {user_message}"
+            )
 
         # llama-server uses OpenAI-compatible format
         # num_ctx is set at server startup (--ctx-size), not per-request
