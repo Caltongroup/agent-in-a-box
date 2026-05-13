@@ -11,6 +11,11 @@ import io
 import subprocess
 import json
 import re
+import time
+import threading
+from pathlib import Path
+from urllib import request as urlrequest
+from urllib import error as urlerror
 
 # Serve static files from Astro build output
 # Set static_url_path=None to disable automatic Flask static routing
@@ -37,7 +42,154 @@ try:
 except Exception as e:
     print(f"Warning: Could not load ElevenLabs key: {e}")
 
-ELEVENLABS_READY = bool(ELEVENLABS_API_KEY)
+def _validate_elevenlabs_key(api_key):
+    """Return (is_valid, error_message)."""
+    if not api_key:
+        return False, 'missing_api_key'
+
+    req = urlrequest.Request(
+        'https://api.elevenlabs.io/v1/user',
+        headers={'xi-api-key': api_key},
+        method='GET',
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                return True, None
+            return False, f'unexpected_status_{resp.status}'
+    except urlerror.HTTPError as e:
+        if e.code in {401, 403}:
+            return False, 'invalid_api_key'
+        return False, f'http_error_{e.code}'
+    except Exception as e:
+        return False, f'validation_error_{type(e).__name__}'
+
+
+ELEVENLABS_READY, ELEVENLABS_VALIDATION_ERROR = _validate_elevenlabs_key(ELEVENLABS_API_KEY)
+
+HERMES_ENV_FILE = os.path.expanduser('~/.hermes/.env')
+HERMES_SESSIONS_DIR = Path(os.path.expanduser('~/.hermes/sessions'))
+
+
+def _get_env_or_file(key, default=''):
+    value = os.getenv(key)
+    if value:
+        return value
+    if os.path.exists(HERMES_ENV_FILE):
+        try:
+            with open(HERMES_ENV_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith(f'{key}='):
+                        return line.split('=', 1)[1].strip()
+        except Exception:
+            return default
+    return default
+
+
+TELEGRAM_BOT_TOKEN = _get_env_or_file('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_HOME_CHAT_ID = _get_env_or_file('TELEGRAM_HOME_CHANNEL', '')
+if not TELEGRAM_HOME_CHAT_ID:
+    TELEGRAM_HOME_CHAT_ID = _get_env_or_file('TELEGRAM_HOME_CHAT_ID', '')
+
+response_queue = []
+response_lock = threading.Lock()
+session_cursor_file = None
+session_cursor_count = 0
+
+voice_diagnostics = []
+voice_diagnostics_lock = threading.Lock()
+
+
+def _enqueue_response(sender, message, source='session'):
+    item = {
+        'id': f"{int(time.time() * 1000)}-{len(message)}",
+        'sender': sender,
+        'message': message,
+        'source': source,
+    }
+    with response_lock:
+        response_queue.append(item)
+
+
+def _session_polling_loop():
+    global session_cursor_file, session_cursor_count
+    while True:
+        try:
+            if not HERMES_SESSIONS_DIR.exists():
+                time.sleep(2)
+                continue
+
+            session_files = sorted(
+                HERMES_SESSIONS_DIR.glob('session_*.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if not session_files:
+                time.sleep(2)
+                continue
+
+            latest = session_files[0]
+            with open(latest, 'r', encoding='utf-8') as f:
+                session_data = json.load(f)
+            messages = session_data.get('messages', [])
+
+            # First pass on a session file should not replay historical backlog.
+            if session_cursor_file != str(latest):
+                session_cursor_file = str(latest)
+                session_cursor_count = len(messages)
+                time.sleep(2)
+                continue
+
+            if len(messages) > session_cursor_count:
+                new_messages = messages[session_cursor_count:]
+                for msg in new_messages:
+                    role = msg.get('role', '')
+                    content = (msg.get('content', '') or '').strip()
+                    if role not in {'user', 'assistant'}:
+                        continue
+                    if len(content) < 2:
+                        continue
+                    if content.startswith('Review'):
+                        continue
+                    _enqueue_response('assistant' if role == 'assistant' else 'user', content[:1200])
+                session_cursor_count = len(messages)
+        except Exception:
+            pass
+        time.sleep(2)
+
+
+threading.Thread(target=_session_polling_loop, daemon=True).start()
+
+
+def _send_to_telegram(message_text):
+    if not TELEGRAM_BOT_TOKEN:
+        return False, 'TELEGRAM_BOT_TOKEN is not configured'
+    if not TELEGRAM_HOME_CHAT_ID:
+        return False, 'TELEGRAM_HOME_CHANNEL (or TELEGRAM_HOME_CHAT_ID) is not configured'
+
+    api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': TELEGRAM_HOME_CHAT_ID,
+        'text': f"UI Message:\n\n{message_text}",
+    }
+
+    req = urlrequest.Request(
+        api_url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            if data.get('ok'):
+                return True, None
+            return False, data.get('description', 'Telegram API returned not-ok')
+    except urlerror.HTTPError as e:
+        return False, f'Telegram HTTP error {e.code}'
+    except Exception as e:
+        return False, str(e)
 
 # Serve static Astro frontend FIRST (before any middleware interferes)
 @app.route('/', defaults={'path': ''})
@@ -91,9 +243,69 @@ def health():
         "browser_compatible": True,
         "tts_ready": ELEVENLABS_READY,
         "tts_mode": "mock" if not ELEVENLABS_READY else "live",
+        "tts_validation_error": ELEVENLABS_VALIDATION_ERROR,
         "hermes_gateway": "available",
-        "ollama": "127.0.0.1:11434"
+        "ollama": "127.0.0.1:11434",
+        "telegram_bridge": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_HOME_CHAT_ID),
+        "sessions_dir": str(HERMES_SESSIONS_DIR),
     })
+
+
+@app.route('/api/voice/health', methods=['GET', 'OPTIONS'])
+def api_voice_health():
+    return health()
+
+
+@app.route('/api/voice/diagnostics', methods=['POST', 'GET', 'OPTIONS'])
+def api_voice_diagnostics():
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    if request.method == 'GET':
+        with voice_diagnostics_lock:
+            return jsonify({
+                'status': 'ok',
+                'count': len(voice_diagnostics),
+                'latest': voice_diagnostics[-1] if voice_diagnostics else None,
+            })
+
+    payload = request.json or {}
+    entry = {
+        'received_at': int(time.time()),
+        'phase': payload.get('phase'),
+        'errorsCount': payload.get('errorsCount', 0),
+        'isStuck': payload.get('isStuck', False),
+    }
+    with voice_diagnostics_lock:
+        voice_diagnostics.append(entry)
+        if len(voice_diagnostics) > 100:
+            voice_diagnostics.pop(0)
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/send-message', methods=['POST', 'OPTIONS'])
+def api_send_message():
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    data = request.json or {}
+    message = (data.get('message', '') or '').strip()
+    if not message:
+        return jsonify({'success': False, 'error': 'Empty message'}), 400
+
+    sent, error_message = _send_to_telegram(message)
+    return jsonify({'success': sent, 'telegram_sent': sent, 'error': error_message})
+
+
+@app.route('/api/telegram-responses', methods=['GET', 'OPTIONS'])
+def api_telegram_responses():
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    with response_lock:
+        messages = response_queue[:]
+        response_queue.clear()
+    return jsonify({'messages': messages, 'count': len(messages)})
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
@@ -103,7 +315,7 @@ def chat():
     
     try:
         data = request.json or {}
-        text = data.get('text', 'No input')
+        text = (data.get('text') or data.get('message') or 'No input').strip()
         
         # Call Hermes CLI with -Q (quiet mode) to get just the response
         # Using hermes chat -q "query" --toolsets browser,terminal
@@ -236,7 +448,7 @@ def tts_url():
     voice_id = data.get('voice_id', 'default')
     
     return jsonify({
-        "audio_url": f"http://127.0.0.1:5000/tts?text={text[:50]}&voice_id={voice_id}",
+        "audio_url": f"http://127.0.0.1:5001/tts?text={text[:50]}&voice_id={voice_id}",
         "duration_estimate": len(text.split()) * 0.3,
         "credits_used": estimate_tts_credits(text),
         "ready": True,

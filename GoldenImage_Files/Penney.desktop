@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Start Penney
+Comment=Launch the Penney HR Assistant web interface
+Exec=bash /home/pi/GoldenImage_Files/start_penney.sh
+Icon=utilities-terminal
+Terminal=true
+Categories=Utility;

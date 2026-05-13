@@ -1,0 +1,57 @@
+# =============================================================================
+# hermes-gateway.service — Penelope: Agent in a Box
+# Manages the Hermes Gateway — the user-facing channel bridge.
+# Default: Telegram. Extensible to web UI, WhatsApp, SMS, etc.
+# Depends on hermes-agent being up first.
+#
+# Install:
+#   sudo cp hermes-gateway.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable hermes-gateway
+#   sudo systemctl start hermes-gateway
+#
+# REQUIRED: Set TELEGRAM_TOKEN below (from @BotFather on Telegram).
+# =============================================================================
+
+[Unit]
+Description=Penelope Hermes Gateway — User Channel Bridge (Telegram)
+After=network.target pocketbase.service hermes-agent.service
+Requires=pocketbase.service
+Wants=hermes-agent.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+
+# --- Set your Telegram bot token here ---
+Environment=TELEGRAM_TOKEN=your-telegram-bot-token-here
+# ----------------------------------------
+
+Environment=VENV=/home/pi/venv
+Environment=HERMES=/home/pi/hermes
+Environment=PB_URL=http://127.0.0.1:8090
+Environment=GATEWAY_PORT=8091
+
+ExecStart=/bin/bash -c '\
+    source ${VENV}/bin/activate && \
+    python ${HERMES}/gateway.py \
+        --mode     telegram \
+        --token    ${TELEGRAM_TOKEN} \
+        --pb-url   ${PB_URL} \
+        --port     ${GATEWAY_PORT}'
+
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-gateway
+
+MemoryMax=256M
+CPUWeight=40
+
+[Install]
+WantedBy=multi-user.target

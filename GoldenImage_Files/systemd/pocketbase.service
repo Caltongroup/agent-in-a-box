@@ -1,0 +1,45 @@
+# =============================================================================
+# pocketbase.service — Penelope: Agent in a Box
+# Manages the PocketBase persistence daemon.
+# Must start before hermes-agent and hermes-gateway.
+#
+# Install:
+#   sudo cp pocketbase.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable pocketbase
+#   sudo systemctl start pocketbase
+# =============================================================================
+
+[Unit]
+Description=Penelope PocketBase — Agent Persistence Layer
+Documentation=https://pocketbase.io
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/pocketbase
+
+ExecStart=/home/pi/pocketbase/pocketbase serve \
+    --http=0.0.0.0:8090 \
+    --dir=/home/pi/pocketbase/data
+
+# Restart automatically on any failure
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pocketbase
+
+# Resource limits (Pi-friendly)
+MemoryMax=256M
+CPUWeight=50
+
+[Install]
+WantedBy=multi-user.target

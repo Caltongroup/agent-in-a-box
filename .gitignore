@@ -123,3 +123,6 @@ llama.cpp/build/
 *.a
 CMakeCache.txt
 CMakeFiles/
+
+GoldenImage_Files/hermes/skills/receipts/credentials.json
+GoldenImage_Files/hermes/skills/receipts/token.pickle

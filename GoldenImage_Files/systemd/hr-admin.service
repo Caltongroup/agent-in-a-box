@@ -1,0 +1,20 @@
+[Unit]
+Description=Penelope HR Admin Portal
+After=network.target ollama.service pocketbase.service hermes-webui.service
+Wants=pocketbase.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/iliad_media_group_agent
+Environment=PYTHONUNBUFFERED=1
+Environment=HR_ADMIN_PASSWORD=iliad2026
+ExecStart=/home/pi/penelope_venv/bin/python3 /home/pi/GoldenImage_Files/hermes/hr_admin.py \
+    --docs /home/pi/iliad_media_group_agent/documents \
+    --pb-url http://127.0.0.1:8090 \
+    --port 5001
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

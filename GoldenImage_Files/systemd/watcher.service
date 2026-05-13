@@ -1,0 +1,61 @@
+# =============================================================================
+# watcher.service — Penelope: Agent in a Box
+# Standalone document folder watcher. Monitors documents/ and auto-ingests
+# new files into ChromaDB using nomic-embed-text via Ollama.
+# Separated from hermes-agent for independent restart and clean logging.
+#
+# Install:
+#   sudo cp watcher.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable watcher
+#   sudo systemctl start watcher
+#
+# NOTE: Edit PROJECT_DIR and COLLECTION to match your onboard_wizard output.
+#       install_services.sh sets these automatically.
+# =============================================================================
+
+[Unit]
+Description=Penelope Document Watcher — Auto RAG Indexer
+After=network.target ollama.service pocketbase.service
+Requires=ollama.service
+# Ollama must be serving embeddings before watcher starts
+ExecStartPre=/bin/bash -c '\
+    until curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; do \
+        echo "Waiting for Ollama…"; sleep 3; \
+    done'
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+
+# --- Edit these to match your onboard_wizard.py output ---
+Environment=PROJECT_DIR=/home/pi/my_organization_agent
+Environment=COLLECTION=my_organization
+# ----------------------------------------------------------
+
+Environment=VENV=/home/pi/venv
+Environment=POLL_INTERVAL=30
+
+ExecStart=/bin/bash -c '\
+    source ${VENV}/bin/activate && \
+    python /home/pi/watcher.py \
+        --docs       ${PROJECT_DIR}/documents \
+        --collection ${COLLECTION} \
+        --chroma-dir ${PROJECT_DIR}/chroma_db \
+        --interval   ${POLL_INTERVAL}'
+
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=penelope-watcher
+
+MemoryMax=256M
+CPUWeight=30
+
+[Install]
+WantedBy=multi-user.target

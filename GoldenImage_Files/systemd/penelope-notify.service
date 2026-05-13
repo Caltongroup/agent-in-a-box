@@ -1,0 +1,42 @@
+# =============================================================================
+# penelope-notify.service — Penelope: Agent in a Box
+# Sends a Telegram message when Penelope boots and all services are healthy.
+# Runs once per boot (Type=oneshot) after all other services are up.
+#
+# Install:
+#   sudo cp penelope-notify.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable penelope-notify
+# =============================================================================
+
+[Unit]
+Description=Penelope Boot Notification — Telegram Ready Alert
+After=network.target pocketbase.service ollama.service hermes-agent.service
+Wants=pocketbase.service ollama.service hermes-agent.service
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+RemainAfterExit=yes
+
+# --- Set your Telegram credentials here ---
+Environment=TELEGRAM_TOKEN=your-telegram-bot-token-here
+Environment=TELEGRAM_CHAT_ID=your-chat-id-here
+# ------------------------------------------
+
+Environment=VENV=/home/pi/venv
+
+ExecStart=/bin/bash -c '\
+    source ${VENV}/bin/activate && \
+    python /home/pi/boot_notify.py \
+        --token   ${TELEGRAM_TOKEN} \
+        --chat-id ${TELEGRAM_CHAT_ID} \
+        --wait    15'
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=penelope-notify
+
+[Install]
+WantedBy=multi-user.target

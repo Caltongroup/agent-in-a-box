@@ -1,0 +1,66 @@
+# =============================================================================
+# hermes-agent.service — Penelope: Agent in a Box
+# Manages the Hermes AI agent (Phi-3.5-mini + RAG + PocketBase).
+# Depends on PocketBase being healthy before starting.
+#
+# Install:
+#   sudo cp hermes-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable hermes-agent
+#   sudo systemctl start hermes-agent
+#
+# NOTE: Edit SOUL_PATH and PROJECT_DIR to match your onboard_wizard.py output.
+# These are set automatically if you use the install_services.sh script.
+# =============================================================================
+
+[Unit]
+Description=Penelope Hermes Agent — AI Brain
+Documentation=https://github.com/your-repo/penelope
+After=network.target pocketbase.service ollama.service watcher.service
+Requires=pocketbase.service ollama.service
+# Wait until both PocketBase and Ollama are healthy before starting
+ExecStartPre=/bin/bash -c 'until curl -sf http://127.0.0.1:8090/api/health; do sleep 2; done'
+ExecStartPre=/bin/bash -c 'until curl -sf http://localhost:11434/api/tags; do sleep 2; done'
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+
+# --- Edit these two paths after running onboard_wizard.py ---
+Environment=PROJECT_DIR=/home/pi/my_organization_agent
+Environment=SOUL_PATH=/home/pi/my_organization_agent/SOUL.md
+# ------------------------------------------------------------
+
+Environment=VENV=/home/pi/venv
+Environment=HERMES=/home/pi/hermes
+Environment=PB_URL=http://127.0.0.1:8090
+Environment=MODEL=phi3.5
+Environment=EMBED=nomic-embed-text
+
+ExecStart=/bin/bash -c '\
+    source ${VENV}/bin/activate && \
+    python ${HERMES}/main.py \
+        --model       ${MODEL} \
+        --embed-model ${EMBED} \
+        --soul        ${SOUL_PATH} \
+        --docs        ${PROJECT_DIR}/documents \
+        --chroma-dir  ${PROJECT_DIR}/chroma_db \
+        --pb-url      ${PB_URL}'
+
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-agent
+
+# Phi-3.5-mini needs room to breathe on a Pi
+MemoryMax=1G
+CPUWeight=80
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
